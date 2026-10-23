@@ -1,0 +1,9 @@
+fastapi
+httpx
+ollama
+pydantic
+python-dotenv
+scikit-learn
+torch
+transformers<5
+uvicorn

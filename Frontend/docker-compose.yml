@@ -1,0 +1,64 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: smartstudy
+      POSTGRES_USER: smartstudy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the project .env file}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartstudy -d smartstudy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ml-service:
+    build: ../ml_services
+    environment:
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OLLAMA_HOST: ${OLLAMA_HOST:-https://ollama.com}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gpt-oss:120b}
+      OLLAMA_THINK: ${OLLAMA_THINK:-low}
+      ML_INTERNAL_KEY: ${ML_INTERNAL_KEY:?Set ML_INTERNAL_KEY in the project .env file}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ../backend
+    depends_on:
+      db:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/smartstudy
+      DB_USERNAME: smartstudy
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the project .env file}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the project .env file}
+      ML_SERVICE_URL: http://ml-service:8000
+      ML_INTERNAL_KEY: ${ML_INTERNAL_KEY:?Set ML_INTERNAL_KEY in the project .env file}
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
+    # no "ports:" any more: only the frontend container talks to the backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    # Development tip: uncomment to serve files straight from your folder,
+    # so edits to app.js and style.css show up on a browser refresh without rebuilding.
+    # volumes:
+    #   - .:/usr/share/nginx/html:ro
+
+volumes:
+  pgdata:
+  uploads:
