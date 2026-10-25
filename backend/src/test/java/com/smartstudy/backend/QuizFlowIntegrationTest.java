@@ -11,6 +11,7 @@ import com.smartstudy.backend.dto.ml.MlDetectResponse;
 import com.smartstudy.backend.dto.ml.MlGradeAnswerResponse;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnRequest;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnResponse;
+import com.smartstudy.backend.dto.ml.MlTranscriptionResponse;
 import com.smartstudy.backend.dto.ml.MlCluster;
 import com.smartstudy.backend.dto.ml.MlQuestion;
 import com.smartstudy.backend.model.Question;
@@ -42,6 +43,8 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -228,6 +231,40 @@ class QuizFlowIntegrationTest {
     }
 
     @Test
+    void paperGenerationBatchesTopicsIntoOneMlRequest() throws Exception {
+        String auth = registerAndLogin("batched-papers@test.com");
+        Integer subjectId = JsonPath.read(postJson("/api/subjects", auth,
+                "{\"name\":\"Algorithms\"}"), "$.id");
+        when(analysisService.analyze(any(), any())).thenReturn(new SubjectAnalysisResponse(
+                new MlAnalyzeResponse(2, 1, List.of(
+                        new MlCluster(1, List.of("Dynamic programming"), 1, 1, 1.0,
+                                List.of(new MlQuestion(1L, 2025, "Explain dynamic programming."))),
+                        new MlCluster(2, List.of("Graph traversal"), 1, 1, 1.0,
+                                List.of(new MlQuestion(1L, 2025, "Explain breadth-first search.")))),
+                        List.of()), LocalDateTime.now()));
+        when(mlClient.generateQuestions(any())).thenReturn(new MlGenerateResponse(List.of(
+                new MlGeneratedQuestion("Question on dynamic programming.", List.of("A", "B", "C", "D"),
+                        0, "Because", 3, "multiple_choice", null, "Dynamic programming"),
+                new MlGeneratedQuestion("Question on graph traversal.", List.of("A", "B", "C", "D"),
+                        1, "Because", 3, "multiple_choice", null, "Graph traversal"))));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/subjects/{id}/questions/generate-from-papers", subjectId)
+                        .file(new MockMultipartFile("files", "paper.pdf", "application/pdf",
+                                "pdf content".getBytes()))
+                        .param("count", "2")
+                        .header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.topics.length()").value(2))
+                .andExpect(jsonPath("$.questions.length()").value(2));
+
+        var request = forClass(MlGenerateRequest.class);
+        verify(mlClient, times(1)).generateQuestions(request.capture());
+        assertThat(request.getValue().topicNames())
+                .containsExactly("Dynamic programming", "Graph traversal");
+    }
+
+    @Test
     void subjectivePracticeGradesTheAnswerAndReturnsAnInlineWritingEstimate() throws Exception {
         String auth = registerAndLogin("subjective@test.com");
         Integer subjectId = JsonPath.read(
@@ -303,6 +340,27 @@ class QuizFlowIntegrationTest {
                 .andExpect(jsonPath("$.question").value(
                         "How would you handle a cache invalidation problem?"))
                 .andExpect(jsonPath("$.complete").value(false));
+    }
+
+    @Test
+    void authenticatedInterviewAudioCanBeTranscribed() throws Exception {
+        String auth = registerAndLogin("transcription@test.com");
+        when(mlClient.transcribeAudio(any(byte[].class), anyString(), anyString()))
+                .thenReturn(new MlTranscriptionResponse("A spoken answer.", "en"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/interview/transcribe")
+                        .file(new MockMultipartFile("file", "answer.webm", "audio/webm",
+                                "audio bytes".getBytes()))
+                        .param("language", "en-US")
+                        .header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.text").value("A spoken answer."))
+                .andExpect(jsonPath("$.language").value("en"));
+
+        verify(mlClient).transcribeAudio(any(byte[].class),
+                org.mockito.ArgumentMatchers.eq("answer.webm"),
+                org.mockito.ArgumentMatchers.eq("en-US"));
 
         mockMvc.perform(post("/api/interview/turn")
                         .contentType(MediaType.APPLICATION_JSON)

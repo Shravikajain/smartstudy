@@ -15,12 +15,16 @@ services:
 
   ml-service:
     build: ../ml_services
+    env_file:
+      - ../ml_services/.env
     environment:
-      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
       OLLAMA_HOST: ${OLLAMA_HOST:-https://ollama.com}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gpt-oss:120b}
       OLLAMA_THINK: ${OLLAMA_THINK:-low}
       ML_INTERNAL_KEY: ${ML_INTERNAL_KEY:?Set ML_INTERNAL_KEY in the project .env file}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+    volumes:
+      - whisper-cache:/root/.cache/huggingface
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -62,3 +66,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  whisper-cache:

@@ -7,6 +7,8 @@ from app import ai_detector, main
 from app.llm_client import LlmError
 from app.ai_detector import AiModelUnavailableError
 from app.schemas import GeneratedQuestion, GradeAnswerResponse, InterviewTurnResponse
+from app.pdf_ocr import PdfOcrError
+from app.transcription import TranscriptionError
 
 client = TestClient(main.app)
 
@@ -24,6 +26,90 @@ PAPER_2 = (
 
 def test_health():
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_scanned_pdf_ocr_requires_internal_service_key(monkeypatch):
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
+    response = client.post(
+        "/extract-pdf-text",
+        files={"file": ("scan.pdf", b"%PDF-test", "application/pdf")},
+    )
+
+    assert response.status_code == 403
+
+
+def test_scanned_pdf_ocr_returns_extracted_text(monkeypatch):
+    text = "Recognized question text. " * 10
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
+    monkeypatch.setattr(main, "extract_pdf_text", lambda pdf_bytes: (text, 94))
+    response = client.post(
+        "/extract-pdf-text",
+        headers={"X-Internal-Key": "test-ocr-key"},
+        files={"file": ("scan.pdf", b"%PDF-test", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"text": text, "pageCount": 94}
+
+
+def test_scanned_pdf_ocr_reports_unreadable_document(monkeypatch):
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
+
+    def unreadable(pdf_bytes):
+        raise PdfOcrError("No readable text could be recognized.")
+
+    monkeypatch.setattr(main, "extract_pdf_text", unreadable)
+    response = client.post(
+        "/extract-pdf-text",
+        headers={"X-Internal-Key": "test-ocr-key"},
+        files={"file": ("scan.pdf", b"%PDF-test", "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "No readable text could be recognized."
+
+
+def test_interview_audio_transcription_requires_internal_key(monkeypatch):
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
+    response = client.post(
+        "/transcribe-audio",
+        files={"file": ("answer.webm", b"audio", "audio/webm")},
+    )
+
+    assert response.status_code == 403
+
+
+def test_interview_audio_transcription_returns_local_transcript(monkeypatch):
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
+    monkeypatch.setattr(
+        main, "transcribe_audio", lambda audio_bytes, language: ("A spoken answer.", "en")
+    )
+    response = client.post(
+        "/transcribe-audio",
+        headers={"X-Internal-Key": "test-ocr-key"},
+        data={"language": "en-US"},
+        files={"file": ("answer.webm", b"audio", "audio/webm")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "A spoken answer.", "language": "en"}
+
+
+def test_interview_audio_transcription_reports_no_speech(monkeypatch):
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
+
+    def no_speech(audio_bytes, language):
+        raise TranscriptionError("No speech was detected.")
+
+    monkeypatch.setattr(main, "transcribe_audio", no_speech)
+    response = client.post(
+        "/transcribe-audio",
+        headers={"X-Internal-Key": "test-ocr-key"},
+        files={"file": ("answer.webm", b"audio", "audio/webm")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "No speech was detected."
 
 
 def test_analyze_detects_a_question_repeated_across_papers():

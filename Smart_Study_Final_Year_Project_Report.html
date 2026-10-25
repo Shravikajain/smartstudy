@@ -1,0 +1,1675 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Study: Adaptive Exam Practice And Interview Preparation Platform</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 22mm 22mm 21mm;
+
+      @bottom-center {
+        content: "";
+      }
+    }
+
+    @page cover {
+      @bottom-center {
+        content: "";
+      }
+    }
+
+    @page prelim {
+      @bottom-center {
+        content: "";
+      }
+    }
+
+    @page main {
+      @bottom-center {
+        content: "";
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: #111;
+      background: #fff;
+      font: 12pt/1.5 "Times New Roman", Times, serif;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      color: #111;
+      line-height: 1.2;
+    }
+
+    h1 {
+      font-size: 20pt;
+      text-align: center;
+      margin: 0 0 18pt;
+    }
+
+    h2 {
+      font-size: 14pt;
+      text-align: center;
+      margin: 0 0 16pt;
+    }
+
+    h3 {
+      font-size: 13pt;
+      margin: 18pt 0 8pt;
+    }
+
+    h4 {
+      font-size: 13pt;
+      margin: 12pt 0 5pt;
+    }
+
+    p {
+      margin: 0 0 9pt;
+      text-align: justify;
+    }
+
+    ul,
+    ol {
+      margin: 4pt 0 10pt 24pt;
+      padding: 0;
+    }
+
+    li {
+      margin: 0 0 4pt;
+      text-align: justify;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8pt 0 14pt;
+      font-size: 10.5pt;
+      line-height: 1.25;
+      page-break-inside: auto;
+    }
+
+    th,
+    td {
+      border: 1px solid #333;
+      padding: 5pt 6pt;
+      vertical-align: top;
+    }
+
+    th {
+      background: #e8edf3;
+      text-align: left;
+      font-weight: bold;
+    }
+
+    tr {
+      page-break-inside: avoid;
+    }
+
+    .cover {
+      page: cover;
+      break-after: page;
+      min-height: 253mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-align: center;
+    }
+
+    .cover .project-title {
+      font-weight: bold;
+      font-size: 20pt;
+      line-height: 1.35;
+      margin: 14mm 0 22mm;
+      text-transform: capitalize;
+    }
+
+    .cover .details {
+      font-size: 16pt;
+      line-height: 1.45;
+    }
+
+    .cover .submitted {
+      margin: 0 0 10pt;
+    }
+
+    .cover .names {
+      display: flex;
+      justify-content: space-around;
+      text-align: left;
+      margin: 18pt 0;
+      gap: 16pt;
+    }
+
+    .cover .institution {
+      line-height: 1.3;
+    }
+
+    .cover .date {
+      margin-top: 10pt;
+    }
+
+    .prelim {
+      page: prelim;
+      break-after: page;
+      min-height: 253mm;
+      display: flex;
+      flex-direction: column;
+      font-size: 14pt;
+    }
+
+    .toc h1 {
+      font-size: 16pt;
+    }
+
+    .prelim .page-num {
+      margin-top: auto;
+      padding-top: 10pt;
+      text-align: center;
+    }
+
+    .cert-signatures {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 60mm;
+    }
+
+    .signature {
+      min-width: 35%;
+      border-top: 1px solid #111;
+      padding-top: 5pt;
+      text-align: center;
+    }
+
+    .declaration-sign {
+      margin: 12pt 0 0 52%;
+      text-align: center;
+    }
+
+    .contents {
+      list-style: none;
+      margin: 0;
+      font-size: 12pt;
+      line-height: 1.08;
+    }
+
+    .contents li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12pt;
+      border-bottom: 1px dotted #777;
+      padding: 0;
+      margin: 0;
+    }
+
+    .contents .sub {
+      padding-left: 18pt;
+    }
+
+    .contents .chapter-entry {
+      font-weight: bold;
+      margin-top: 4pt;
+    }
+
+    .chapter {
+      page: main;
+      break-before: page;
+    }
+
+    .chapter-title {
+      text-align: center;
+      margin: 0 0 20pt;
+      font-size: 14pt;
+      font-weight: bold;
+    }
+
+    .subsection {
+      break-after: auto;
+    }
+
+    .figure {
+      margin: 10pt auto 14pt;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+
+    .figure svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .caption {
+      font-size: 10.5pt;
+      text-align: center;
+      margin-top: 4pt;
+    }
+
+    .note {
+      border-left: 3px solid #777;
+      padding: 6pt 9pt;
+      margin: 9pt 0 12pt;
+      background: #f7f7f7;
+      font-size: 10.5pt;
+    }
+
+    .diagram-label {
+      font: 12px "Times New Roman", serif;
+      fill: #111;
+    }
+
+    .diagram-box {
+      fill: #f5f8fb;
+      stroke: #25384a;
+      stroke-width: 1.4;
+    }
+
+    .diagram-arrow {
+      stroke: #25384a;
+      stroke-width: 1.4;
+      fill: none;
+      marker-end: url(#arrow);
+    }
+
+    .small {
+      font-size: 10.5pt;
+    }
+
+    .center {
+      text-align: center;
+    }
+
+    .endmatter {
+      page: main;
+      break-before: page;
+    }
+
+    .refs li {
+      padding-left: 8pt;
+    }
+
+    .no-break {
+      page-break-inside: avoid;
+    }
+
+    @media screen {
+      body {
+        max-width: 210mm;
+        margin: 18px auto;
+        padding: 20mm 22mm;
+        box-shadow: 0 0 8px #aaa;
+      }
+
+      .cover,
+      .prelim {
+        min-height: 260mm;
+      }
+
+      .chapter,
+      .endmatter {
+        border-top: 1px solid #ddd;
+        padding-top: 20px;
+      }
+    }
+
+    @media print {
+      body {
+        width: auto;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+      }
+
+      a {
+        color: #111;
+        text-decoration: none;
+      }
+
+      .chapter,
+      .endmatter {
+        border: 0;
+        padding-top: 0;
+      }
+
+      .page-num {
+        display: none;
+      }
+    }
+  </style>
+</head>
+ 
+<body>
+
+  <section class="cover">
+    <div>
+      <div class="project-title">Smart Study champion: Adaptive Exam Practice And Interview Preparation Platform</div>
+      <div class="details">
+        <p class="center submitted">A Report Submitted<br>in Partial Fulfillment for the Degree of</p>
+        <strong>Bachelor of Engineering</strong><br>in<br>
+        <strong>Information Technology</strong><br>
+        (Session [2026–2027])
+      </div>
+    </div>
+    <div class="details">
+      <div class="names">
+        <div><strong>Submitted By:</strong><br>Shravika jain (23I7166)<br> Taniksha Patidar (23I7173)<br>Siddhi nagar
+          (23I7186)</div>
+        <div><strong>Guided By:</strong><br>Prof.Hemant Makwana<br></div>
+      </div>
+      <div class="institution">
+        Department of Information Technology<br>
+        Institute of Engineering &amp; Technology<br>
+        Vikramshila Campus<br>
+        Devi Ahilya Vishwavidyalaya, Indore (M.P.)<br>
+      </div>
+      <div class="date">October 2026</div>
+    </div>
+  </section>
+
+  <section class="prelim">
+    <h1>CERTIFICATE</h1>
+    <p>The project report entitled <strong>“Smart Study Champion: Adaptive Exam Practice And Interview Preparation
+        Platform”</strong> submitted by <strong>Shravika jain , Taniksha patidar , Siddhi nagar </strong> is approved for partial
+      fulfillment for the award of Bachelor of Engineering in <strong>Information Technology</strong> degree by Devi
+      Ahilya Vishwavidyalaya, Indore.</p>
+    <div class="cert-signatures">
+      <div class="signature">Internal Examiner</div>
+      <div class="signature">External Examiner</div>
+    </div>
+    <div class="page-num">i</div>
+  </section>
+
+  <section class="prelim">
+    <h1>RECOMMENDATION</h1>
+    <p>The dissertation entitled <strong>“Smart Study Champion : Adaptive Exam Practice And Interview Preparation
+        Platform”</strong> submitted by <strong>Shravika jain , Taniksha patidar ,Siddhi nagar</strong> is a satisfactory account of the
+      bona fide work done under my supervision and is recommended towards the partial fulfillment for the award of
+      Bachelor of Engineering in <strong>Information technology </strong> degree by Devi Ahilya Vishwavidyalaya, Indore.
+    </p>
+    <p style="margin-top:30pt">Date: 27/10/2026</p>
+    <div class="declaration-sign">[Signature]<br><strong>Prof. Hemant Makwana</strong><br>Department of Information
+      Technology</div>
+    <div class="declaration-sign">_________________<br>Counter-signature of HOD</div>
+    <div class="page-num">ii</div>
+  </section>
+
+  <section class="prelim">
+    <h1>CANDIDATE DECLARATION</h1>
+    <p>We hereby declare that the work presented in this project entitled <strong>“Smart Study Champion: Adaptive Exam
+        Practice And Interview Preparation Platform”</strong>, in partial fulfillment of the degree of Bachelor of
+      Engineering in <strong>Information technology </strong>, is an authentic record of work carried out under the
+      supervision and guidance of <strong>Hemant Makwana , Professir and HOD of IT Department</strong>, Department of
+      <strong>Information Technology</strong>, Institute of Engineering and Technology, Devi Ahilya Vishwavidyalaya, Indore.
+    </p>
+    <p>We are responsible for the material embodied in this project. This project has not been submitted, in whole or in
+      part, for the award of any other degree or diploma. All external sources used in preparing this report are
+      acknowledged in the references.</p>
+    <p>Date: 27/10/2026<br>Place: Indore</p>
+    <div class="declaration-sign">_____________________<br>Shravika jain</div>
+    <div class="declaration-sign">_____________________<br>Taniksha Patidar</div>
+    <div class="declaration-sign">_____________________<br>Siddhi Nagar</div>
+    <div class="page-num">iii</div>
+  </section>
+
+  <section class="prelim">
+    <h1>SELF-DECLARATION OF PLAGIARISM REPORT</h1>
+    <p>The project report entitled <strong>“Smart Study: Adaptive Exam Practice And Interview Preparation
+        Platform”</strong> submitted by <strong>Shravika jain , Taniksha patidar , Siddhi nagar</strong> in partial fulfillment of the
+      requirements for the award of Bachelor of Engineering in <strong>Information Technology
+      </strong> has been checked for plagarism using a standard detection tool.</strong>.</p>
+      <p>the similairty index of the report is ____ % , which is within the permissanle limit as per institute/university norms</p>
+      <p>We declare that the work submitted is original, that materials from other sources have been cited, and that we
+      accept responsibility for any discrepancy identified in the future.</p>
+    <p style="margin-top:26pt"><strong>Signature of Student(s):</strong><br>1. _______________________________<br>2.
+      _______________________________<br>3. _______________________________<br><br>Date: _____________</p>
+    <div class="note">The similarity percentage is intentionally left blank. Run the institute-approved check on the
+      final, student-reviewed report and enter its authentic result before submission.</div>
+    <div class="page-num">iv</div>
+  </section>
+
+  <section class="prelim">
+    <h1>ACKNOWLEDGEMENTS</h1>
+    <p>We express our sincere gratitude to our project guide and 
+      HOD of the department , <strong> Prof. Hemant Makwana </strong>, for the
+      guidance, technical direction and constructive feedback provided throughout the development of Smart Study. The
+      discussions on project scope, software design and evaluation helped us refine the system and this report.</p>
+    <p>We are also grateful to the Director and the Institute of Engineering and Technology, Devi Ahilya
+      Vishwavidyalaya, for providing the institutional environment in which this work was undertaken.</p>
+    <p>We acknowledge the maintainers of the open-source frameworks and libraries used in this project, including Spring
+      Boot, FastAPI, PostgreSQL, scikit-learn and Faster-Whisper. Their documentation and software made it possible to
+      implement and test the application. Finally, we thank our families and peers for their encouragement during the
+      project.</p>
+    <div class="page-num">v</div>
+  </section>
+
+  <section class="prelim">
+    <h1>ABSTRACT</h1>
+    <p>Students preparing for examinations often have to locate recurring topics across past papers, create additional
+      practice questions and judge what to study next. Smart Study is a web-based learning application that brings these
+      activities into one workflow. A student organizes work by subject and topic, uploads past examination papers in
+      PDF format, and uses extracted text to identify question themes and recurring questions. The application can
+      generate original multiple-choice or subjective practice questions from a selected topic and available study
+      material. Its quiz service records responses and adjusts an ability estimate so that the next question is selected
+      near the learner’s current estimated level. Subjective responses can receive model-assisted scores and feedback. A
+      separate interview-practice workflow supports academic-subject or engineering-role sessions, typed responses and
+      browser-recorded speech transcribed by a local Whisper model in the ML container. The system is implemented as a
+      browser frontend, a Spring Boot API, a Python FastAPI machine-learning service and a PostgreSQL database, deployed
+      together with Docker Compose. This report presents the problem, related learning systems, requirements, design,
+      data model, implementation and test evidence. The current repository includes automated tests for core quiz,
+      analysis, PDF and transcription behavior; their results and the limits of the available evidence are reported
+      explicitly. Smart Study is a practice and revision aid, not a replacement for instructor judgment or an accredited
+      examination platform. Its usefulness depends on the quality of uploaded material and generated feedback, and
+      generated content should be reviewed by learners and instructors.</p>
+    <p class="small"><strong>Keywords:</strong> adaptive learning , examination preparation, question generation, item
+      response theory, past-paper analysis, interview practice.</p>
+    <div class="page-num">vi</div>
+  </section>
+
+  <section class="prelim toc">
+    <h1>TABLE OF CONTENTS</h1>
+    <ul class="contents">
+      <li><span>Certificate</span><span>i</span></li>
+      <li><span>Recommendation</span><span>ii</span></li>
+      <li><span>Candidate Declaration</span><span>iii</span></li>
+      <li><span>Self-Declaration of Plagiarism Report</span><span>iv</span></li>
+      <li><span>Acknowledgements</span><span>v</span></li>
+      <li><span>Abstract</span><span>vi</span></li>
+      <li class="chapter-entry"><span>Chapter 1 — Introduction</span><span>1</span></li>
+      <li class="sub"><span>1.1 Overview and Issues Involved</span><span>1</span></li>
+      <li class="sub"><span>1.2 Problem Definition</span><span>1</span></li>
+      <li class="sub"><span>1.3 Proposed Solution</span><span>2</span></li>
+      <li class="chapter-entry"><span>Chapter 2 — Literature Survey</span><span>4</span></li>
+      <li class="sub"><span>2.1 Existing Solutions</span><span>4</span></li>
+      <li class="sub"><span>2.2 Methodology and Concepts</span><span>5</span></li>
+      <li class="chapter-entry"><span>Chapter 3 — Analysis and Design</span><span>8</span></li>
+      <li class="sub"><span>3.1 Software Requirements</span><span>8</span></li>
+      <li class="sub"><span>3.2 Hardware Requirements</span><span>9</span></li>
+      <li class="sub"><span>3.3 Analysis Diagrams and Use Cases</span><span>10</span></li>
+      <li class="sub"><span>3.4 Design Diagrams</span><span>12</span></li>
+      <li class="chapter-entry"><span>Chapter 4 — Implementation and Testing</span><span>14</span></li>
+      <li class="sub"><span>4.1 Database Design</span><span>14</span></li>
+      <li class="sub"><span>4.2 Class Design</span><span>15</span></li>
+      <li class="sub"><span>4.3 Test Cases and Results</span><span>16</span></li>
+      <li class="chapter-entry"><span>Chapter 5 — Conclusion</span><span>19</span></li>
+      <li><span>References</span><span>21</span></li>
+      <li><span>Appendix A — User Workflow and API</span><span>22</span></li>
+      <li><span>Appendix B — Submission Completion Checklist</span><span>23</span></li>
+    </ul>
+    <div class="page-num">vii</div>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-title">CHAPTER 1<br>INTRODUCTION</div>
+    <h3>1.1 Overview and Issues Involved</h3>
+    <p>Past examination papers are valuable because they expose learners to the wording, topic emphasis and level of
+      questions used in earlier assessments. In practice, however, a student may have to collect papers from several
+      locations, read them manually, notice repeated concepts, prepare a personal question bank and then decide which
+      question to attempt next. These steps are time-consuming and do not automatically provide targeted feedback. A
+      static list of questions also gives every learner the same sequence even when their knowledge differs.</p>
+    <p>Smart Study addresses this workflow through a browser application organized around subjects and topics. Users can
+      maintain their own subject areas, upload past papers, inspect recurring themes, generate new practice questions,
+      take a quiz that selects questions according to an evolving ability estimate, and rehearse academic or engineering
+      interviews. The system combines deterministic software components (storage, parsing, topic organization, quiz
+      state and ability updates) with machine-learning services for text analysis, question generation, written feedback
+      and speech transcription.</p>
+    <p>The application is designed as a study aid. Text extraction may be imperfect for scanned or poorly formatted
+      documents; semantic clustering can group questions that share vocabulary without being conceptually identical; and
+      generated questions or scores may contain errors. Consequently, the application should present its outputs as
+      guidance and preserve the learner’s responsibility to verify educational content.</p>
+
+    <h3>1.2 Problem Definition</h3>
+    <p>University learners lack a single, account-based workflow that converts their own past-paper material into
+      organized, recurring-topic insights and adaptive practice while also supporting written-answer feedback and
+      interview rehearsal. Manual analysis is repetitive; static practice does not adapt to demonstrated performance;
+      and separate tools often divide content management, practice and feedback across different interfaces.</p>
+    <p><strong>Project objective.</strong> Design and implement a deployable web system that securely organizes study
+      content, extracts and analyzes uploaded examination papers, generates topic-linked practice, adapts quiz
+      difficulty from responses, and supports conversational interview practice with optional voice input.</p>
+    <h4>Project objectives</h4>
+    <ul>
+      <li>Provide account registration, login and user-scoped access to subjects and study material.</li>
+      <li>Allow learners to create subjects/topics and upload PDF question papers with an optional examination year.
+      </li>
+      <li>Extract text from digital PDFs and route scanned documents to a protected OCR service.</li>
+      <li>Group extracted questions and report recurring questions and topic clusters across papers.</li>
+      <li>Generate original multiple-choice and subjective questions and conduct adaptive quizzes.</li>
+      <li>Provide rubric-guided feedback for subjective answers and conduct subject/role interview sessions.</li>
+      <li>Support browser audio capture and local-service transcription without sending interview audio to an external
+        speech provider.</li>
+    </ul>
+    <h4>Scope and constraints</h4>
+    <p>The implemented scope is a single-page browser interface, Spring Boot REST API, FastAPI ML service and
+      PostgreSQL-backed storage, with Docker Compose as the local deployment route. The ML text-generation integration
+      uses an Ollama-compatible endpoint configured through environment variables. Speech recognition uses
+      Faster-Whisper in the ML container. A working provider key and configured services are required for model-backed
+      features. No claim is made that the model outputs are guaranteed correct, that the system is a high-stakes
+      assessment tool, or that the current repository represents a production-scale hosted service.</p>
+
+    <h3>1.3 Proposed Solution</h3>
+    <p>Smart Study uses a service-oriented design. The frontend presents sign-in, subject dashboards, paper management,
+      practice and interview views. The backend authenticates requests, checks ownership, persists domain data and
+      coordinates calls to the ML service. The ML service exposes typed HTTP endpoints for analysis, question
+      generation, grading, interview turns, scanned-PDF OCR and audio transcription. PostgreSQL stores structured
+      entities; uploaded PDFs are kept in a persistent uploads volume. The system is composed with Docker so that its
+      service boundaries and dependencies can be started together.</p>
+    <p>The paper-analysis pipeline extracts question-like text, normalizes vocabulary, creates TF-IDF features and
+      clusters questions using K-means. Candidate cluster counts are compared using the silhouette score within a
+      configured bound. Similar questions across different papers are joined using cosine similarity and a configurable
+      threshold; repeated concepts are returned with occurrence and year metadata. This produces an inspection aid
+      rather than a guarantee of syllabus coverage.</p>
+    <p>Adaptive practice maintains an ability estimate for a quiz session. The implementation uses a logistic response
+      probability and a bounded update after each answer, then selects a remaining question whose difficulty is closest
+      to the current estimate. This is a simplified item-response-inspired procedure; it is not a calibrated
+      psychometric instrument and does not estimate all parameters of a full item response model.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 760 280" role="img" aria-label="Smart Study workflow">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="#25384a" />
+          </marker>
+        </defs>
+        <rect class="diagram-box" x="20" y="95" width="130" height="62" rx="8" /><text class="diagram-label" x="85"
+          y="121" text-anchor="middle">Learner</text><text class="diagram-label" x="85" y="140"
+          text-anchor="middle">signs in / studies</text>
+        <rect class="diagram-box" x="205" y="35" width="160" height="62" rx="8" /><text class="diagram-label" x="285"
+          y="61" text-anchor="middle">Manage subject</text><text class="diagram-label" x="285" y="80"
+          text-anchor="middle">and topic</text>
+        <rect class="diagram-box" x="205" y="165" width="160" height="62" rx="8" /><text class="diagram-label" x="285"
+          y="191" text-anchor="middle">Upload past paper</text><text class="diagram-label" x="285" y="210"
+          text-anchor="middle">PDF / year</text>
+        <rect class="diagram-box" x="430" y="165" width="145" height="62" rx="8" /><text class="diagram-label" x="502"
+          y="191" text-anchor="middle">Extract and</text><text class="diagram-label" x="502" y="210"
+          text-anchor="middle">analyze questions</text>
+        <rect class="diagram-box" x="625" y="95" width="120" height="62" rx="8" /><text class="diagram-label" x="685"
+          y="121" text-anchor="middle">Practice and</text><text class="diagram-label" x="685" y="140"
+          text-anchor="middle">review feedback</text>
+        <rect class="diagram-box" x="430" y="35" width="145" height="62" rx="8" /><text class="diagram-label" x="502"
+          y="61" text-anchor="middle">Generate question</text><text class="diagram-label" x="502" y="80"
+          text-anchor="middle">or interview turn</text>
+        <path class="diagram-arrow" d="M150 115 L200 75" />
+        <path class="diagram-arrow" d="M150 140 L200 190" />
+        <path class="diagram-arrow" d="M365 195 L425 195" />
+        <path class="diagram-arrow" d="M575 195 L625 145" />
+        <path class="diagram-arrow" d="M365 65 L425 65" />
+        <path class="diagram-arrow" d="M575 65 L650 95" />
+        <path class="diagram-arrow" d="M685 157 C685 255 285 255 285 232" />
+      </svg>
+      <div class="caption">Figure 1.1: High-level study workflow. Generated and analyzed material returns to a
+        learner-controlled practice and review loop.</div>
+    </div>
+
+    <h4>Expected contribution</h4>
+    <p>The project’s contribution is the integration of paper organization, recurring-question analysis, question
+      generation, adaptive practice and interview rehearsal in one subject-centered application. Compared with static
+      question lists, the quiz loop responds to prior answers; compared with standalone model prompts, the workflow
+      stores user-owned topics, papers, questions and quiz sessions in a structured application. These are design-level
+      advantages; comparative learning outcomes have not been established by a controlled educational study.</p>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-title">CHAPTER 2<br>LITERATURE SURVEY</div>
+    <h3>2.1 Existing Solutions</h3>
+    <p>Digital learning products commonly provide some combination of structured lessons, flashcards, assessment
+      authoring, question banks and progress tracking. The following review compares representative tools and categories
+      relevant to Smart Study. It is a functional comparison based on publicly described product capabilities, not a
+      benchmark or independent evaluation of learning effectiveness.</p>
+    <h4>2.1.1 Learning management systems and Moodle Quiz</h4>
+    <p>Moodle is an open-source learning management system used to deliver course content, activities and assessments.
+      Its Quiz activity supports instructor-authored questions, attempts, grading and feedback within a course [6]. It
+      is a capable platform when an institution configures the course and question bank. Smart Study differs in its
+      focus on an individual learner’s past examination papers, automatic cross-paper topic/repetition analysis and
+      adaptive practice workflow. Moodle’s extensive administration model may be more than a learner needs for personal
+      revision.</p>
+    <h4>2.1.2 Quizlet</h4>
+    <p>Quizlet centers on user- or teacher-created study sets and offers digital flashcard and practice experiences [7].
+      Its strength is quick vocabulary and concept review supported by a large content ecosystem. A user typically needs
+      prepared study material; it does not constitute the project’s specific pipeline for parsing a learner’s
+      examination-paper collection, clustering paper questions and using those patterns to seed topic-linked adaptive
+      quiz sessions.</p>
+    <h4>2.1.3 Khan Academy</h4>
+    <p>Khan Academy provides structured lessons and practice across supported subjects, with learner progress linked to
+      a curated curriculum [8]. Its strength is the combination of instructional material and exercises. Smart Study is
+      instead designed to start from a learner’s own examination papers and topic organization. It does not attempt to
+      reproduce Khan Academy’s broad curriculum, instructional video library or institution-scale learning analytics.
+    </p>
+    <h4>2.1.4 Commercial exam-preparation platforms</h4>
+    <p>Exam-preparation services commonly provide syllabus-aligned courses, mock examinations, question banks and
+      performance reports for particular examinations. Their curated content can provide consistency and exam-specific
+      guidance. Their scope is often tied to a provider’s content catalog and target assessment. Smart Study’s intended
+      distinction is learner-supplied paper analysis and customizable subjects rather than a centrally curated,
+      examination-specific question bank.</p>
+    <h4>2.1.5 AI study assistants and question generators</h4>
+    <p>General-purpose AI assistants and educational question generators can create explanations, practice prompts and
+      conversational feedback. They offer flexible interaction but depend on the supplied context and the model’s
+      reliability. A standalone chat does not automatically provide a persistent relation between a learner’s subjects,
+      uploaded papers, generated question records, quiz state and past-paper recurrence. Smart Study wraps model
+      services in a structured subject-and-quiz workflow and validates generated question fields before storing them.
+    </p>
+    <h4>2.1.6 Speech-enabled interview practice</h4>
+    <p>Interview simulators and voice assistants can help candidates rehearse responses. Smart Study’s interview
+      workflow supports subject or engineering-role targets, question sequences and feedback; the browser can capture
+      audio and submit it to the local ML service for transcription. This is a focused practice workflow, not a hiring
+      assessment, professional interview credential or guarantee of interview performance.</p>
+    <h4>Research concepts informing the project</h4>
+    <p>Item response theory models the probability of a response in relation to learner ability and item properties. The
+      project borrows the intuition that practice can be selected near an evolving estimate of ability, while
+      implementing a deliberately simpler bounded logistic update [1, 2]. TF-IDF assigns greater importance to terms
+      that are informative within a document collection, while K-means groups vector representations around centroids
+      [3, 4]. The silhouette coefficient can help compare candidate clusterings by considering compactness and
+      separation [5]. These techniques are used as practical analysis components; none alone understands educational
+      semantics or proves that a cluster is pedagogically coherent.</p>
+    <p><strong>Gap and justification.</strong> The reviewed systems typically emphasize curated courses, flashcard sets,
+      instructor-managed assessments or open-ended generative chat. The project addresses a narrower integration gap: a
+      learner can bring their own paper corpus, organize it by subject, inspect recurring patterns and continue directly
+      into generated and adaptive practice, with interview rehearsal in the same application. The gap is functional and
+      architectural; user studies are still required to demonstrate learning benefit.</p>
+
+    <h3>2.2 Methodology and Conceptual Requirements</h3>
+    <h4>2.2.1 Development methodology</h4>
+    <p>The project follows an iterative implementation approach. First, the repository’s user-facing workflow and domain
+      objects are defined. Next, API contracts and persistence entities are implemented in the Spring Boot service. The
+      Python service supplies analysis and model-backed tasks behind typed request/response schemas. The browser
+      interface consumes the API, while Docker Compose connects the application and database. Automated unit,
+      integration and API tests are used to check important behaviors. Iterations address the paper-import path,
+      adaptive quiz lifecycle, interview turn flow and voice transcription. Configuration values and secrets are
+      supplied through environment variables rather than committed source.</p>
+    <h4>2.2.2 Concepts and algorithms</h4>
+    <ul>
+      <li><strong>REST service:</strong> An HTTP API exposes resources and actions using JSON or multipart form data.
+        The frontend communicates with the backend; the backend calls the internal ML service.</li>
+      <li><strong>PDF extraction and OCR:</strong> PDFBox extracts embedded text from digitally generated documents.
+        When scanned pages contain no usable text, an authenticated internal endpoint can render pages and run OCR.
+        Extraction quality depends on document clarity and language support.</li>
+      <li><strong>TF-IDF:</strong> Each question is represented by weighted one- and two-word terms. Frequent general
+        examination words are removed to reduce uninformative similarity.</li>
+      <li><strong>K-means and silhouette selection:</strong> K-means groups the sparse text vectors. The analysis
+        chooses a cluster count by checking silhouette scores for a bounded set of candidates; deterministic random
+        seeds make the process more reproducible.</li>
+      <li><strong>Cosine similarity and repeated questions:</strong> Questions above a similarity threshold are linked
+        only across different paper IDs. Connected groups supply the repeated-question list and years.</li>
+      <li><strong>Adaptive quiz:</strong> A logistic probability estimates the chance of a correct response given
+        ability and difficulty. After an answer, the estimate is updated by a diminishing step and clamped to a
+        supported range. The next eligible item is the one closest to the current estimate.</li>
+      <li><strong>Structured generation and feedback:</strong> The ML service requests schema-constrained JSON and
+        validates question type, option count, correct-answer index and reference-answer requirements. Subjective
+        feedback is model-assisted and should be treated as formative feedback.</li>
+      <li><strong>Speech transcription:</strong> The browser records an audio response and sends it to the internal API.
+        Faster-Whisper performs local CPU transcription in the ML container; the resulting text is submitted as the
+        candidate response.</li>
+    </ul>
+    <h4>2.2.3 Security and privacy considerations</h4>
+    <p>Authenticated application routes use JWT-based identity and user ownership checks. Internal OCR/transcription
+      calls are protected by a shared service key and constant-time comparison. Deployment secrets, database credentials
+      and model-provider keys are configured externally. Uploaded papers and audio contain potentially sensitive
+      information, so operators should restrict access to volumes, use HTTPS outside localhost, establish retention
+      rules, and avoid uploading material without the right to use it. Model providers may process text sent for
+      generation or grading; operators must review provider terms and avoid sensitive personal data. The local
+      transcription path is designed not to send captured interview audio to an external speech provider.</p>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-title">CHAPTER 3<br>ANALYSIS AND DESIGN</div>
+    <h3>3.1 Software Requirements</h3>
+    <h4>3.1.1 Functional requirements</h4>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Requirement</th>
+        <th>Acceptance description</th>
+      </tr>
+      <tr>
+        <td>FR-01</td>
+        <td>Account access</td>
+        <td>A visitor can register or sign in; protected actions are associated with the authenticated user.</td>
+      </tr>
+      <tr>
+        <td>FR-02</td>
+        <td>Subject and topic management</td>
+        <td>A learner can create subjects and topics and view their own study areas.</td>
+      </tr>
+      <tr>
+        <td>FR-03</td>
+        <td>Paper management</td>
+        <td>A learner can upload a PDF to a subject, optionally record its exam year, list papers and delete a paper.
+        </td>
+      </tr>
+      <tr>
+        <td>FR-04</td>
+        <td>Paper analysis</td>
+        <td>Text from uploaded papers is analyzed into question clusters and cross-paper recurring-question results.
+        </td>
+      </tr>
+      <tr>
+        <td>FR-05</td>
+        <td>Question generation</td>
+        <td>The system can request multiple-choice or subjective questions for selected topics and persist usable
+          results.</td>
+      </tr>
+      <tr>
+        <td>FR-06</td>
+        <td>Adaptive quiz</td>
+        <td>The learner can answer quiz questions, receive results/feedback and progress until completion.</td>
+      </tr>
+      <tr>
+        <td>FR-07</td>
+        <td>Subjective assessment</td>
+        <td>A written response is evaluated against a reference answer and rubric, returning a bounded score and
+          feedback.</td>
+      </tr>
+      <tr>
+        <td>FR-08</td>
+        <td>Interview practice</td>
+        <td>A learner can choose an academic subject or engineering role, answer a question sequence and receive
+          feedback.</td>
+      </tr>
+      <tr>
+        <td>FR-09</td>
+        <td>Voice response</td>
+        <td>A learner can record a response in the browser and submit audio for transcription by the local ML service.
+        </td>
+      </tr>
+    </table>
+    <h4>3.1.2 Non-functional requirements</h4>
+    <ul>
+      <li><strong>Security:</strong> User-owned data must be checked against the authenticated principal; internal ML
+        endpoints must not be exposed as public application routes.</li>
+      <li><strong>Reliability:</strong> Invalid PDF, malformed model responses and unavailable dependencies must produce
+        explicit errors rather than fabricated success results.</li>
+      <li><strong>Usability:</strong> Primary workflows must be available in a modern browser, with typed answers
+        retained as an alternative to voice.</li>
+      <li><strong>Maintainability:</strong> Frontend, API, ML service and persistence responsibilities are separated and
+        communicate through explicit contracts.</li>
+      <li><strong>Portability:</strong> Dockerfiles and Docker Compose describe the local multi-service deployment;
+        secrets and runtime configuration remain external.</li>
+      <li><strong>Performance:</strong> File-size and question-count limits bound expensive operations. Exact throughput
+        and latency targets have not yet been established by load testing.</li>
+      <li><strong>Data integrity:</strong> Relational ownership and foreign-key associations keep each subject, paper,
+        topic and quiz connected to its user context.</li>
+    </ul>
+    <h4>3.1.3 Technologies and tools</h4>
+    <table>
+      <tr>
+        <th>Component</th>
+        <th>Technology</th>
+        <th>Reason for selection</th>
+      </tr>
+      <tr>
+        <td>User interface</td>
+        <td>HTML, CSS, JavaScript, Nginx</td>
+        <td>Lightweight browser client; static assets are served separately from API processing.</td>
+      </tr>
+      <tr>
+        <td>Application API</td>
+        <td>Java 25, Spring Boot, Spring Web MVC, Spring Data JPA, Spring Security</td>
+        <td>Typed REST endpoints, persistence integration and authentication support.</td>
+      </tr>
+      <tr>
+        <td>Persistence</td>
+        <td>PostgreSQL 16</td>
+        <td>Relational storage for users, subjects, papers, questions and quiz sessions.</td>
+      </tr>
+      <tr>
+        <td>ML service</td>
+        <td>Python, FastAPI, Pydantic, scikit-learn</td>
+        <td>Typed service contracts and established text-vectorization and clustering implementations.</td>
+      </tr>
+      <tr>
+        <td>PDF</td>
+        <td>Apache PDFBox; pdf2image and OCR dependencies for scans</td>
+        <td>Extract embedded PDF text and provide a separate OCR path for scanned documents.</td>
+      </tr>
+      <tr>
+        <td>Language model</td>
+        <td>Ollama-compatible API</td>
+        <td>Question generation, subjective feedback and interview interaction are configured independently of
+          application code.</td>
+      </tr>
+      <tr>
+        <td>Speech</td>
+        <td>Faster-Whisper</td>
+        <td>Local-container transcription so audio does not require an external speech provider.</td>
+      </tr>
+      <tr>
+        <td>Deployment</td>
+        <td>Docker, Docker Compose</td>
+        <td>Build and connect the frontend, backend, ML service and database consistently.</td>
+      </tr>
+      <tr>
+        <td>Testing</td>
+        <td>JUnit / Spring Boot Test; pytest</td>
+        <td>Unit, integration and API-level checks for Java and Python components.</td>
+      </tr>
+    </table>
+
+    <h3>3.2 Hardware Requirements</h3>
+    <p><strong>Development/deployment host (minimum practical baseline):</strong> 64-bit Windows, macOS or Linux capable
+      of running Docker Desktop/Engine; a multi-core CPU; 8 GB RAM for a small local trial (16 GB or more recommended
+      when PostgreSQL, the Java service and the local speech model run together); several GB of free disk for images,
+      uploaded papers and the downloaded Whisper model; and a microphone for voice practice. The exact memory and disk
+      requirement depends on the chosen Whisper model, OCR packages and concurrent workload.</p>
+    <p><strong>Client device:</strong> A recent laptop, desktop or mobile device with a standards-compliant browser and
+      network access to the application. Microphone access requires a secure context such as localhost or HTTPS and
+      explicit browser permission. If the client microphone is unavailable, interview answers can be typed.</p>
+    <p><strong>External services:</strong> The configured Ollama endpoint and model must be reachable for question
+      generation, grading and conversational interview responses. When using a hosted provider, a valid API key is
+      required. These are operational dependencies, not hardware requirements of the learner’s browser.</p>
+
+    <h3>3.3 Analysis Diagrams</h3>
+    <h4>3.3.1 Use Case Model</h4>
+    <div class="figure">
+      <svg viewBox="0 0 760 315" role="img" aria-label="Use case model">
+        <defs>
+          <marker id="arrow2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="#25384a" />
+          </marker>
+        </defs>
+        <rect x="155" y="20" width="440" height="275" fill="#fff" stroke="#25384a" stroke-width="1.5" />
+        <text class="diagram-label" x="375" y="39" text-anchor="middle" font-weight="bold">Smart Study System</text>
+        <ellipse cx="370" cy="80" rx="105" ry="22" class="diagram-box" /><text class="diagram-label" x="370" y="84"
+          text-anchor="middle">Manage account and subjects</text>
+        <ellipse cx="370" cy="128" rx="105" ry="22" class="diagram-box" /><text class="diagram-label" x="370" y="132"
+          text-anchor="middle">Upload and analyze papers</text>
+        <ellipse cx="370" cy="176" rx="105" ry="22" class="diagram-box" /><text class="diagram-label" x="370" y="180"
+          text-anchor="middle">Generate practice questions</text>
+        <ellipse cx="370" cy="224" rx="105" ry="22" class="diagram-box" /><text class="diagram-label" x="370" y="228"
+          text-anchor="middle">Take adaptive quiz</text>
+        <ellipse cx="370" cy="270" rx="105" ry="22" class="diagram-box" /><text class="diagram-label" x="370" y="274"
+          text-anchor="middle">Practice interview / voice</text>
+        <circle cx="65" cy="130" r="16" fill="#fff" stroke="#25384a" stroke-width="2" />
+        <path d="M65 146 L65 190 M42 163 L88 163 M65 190 L44 220 M65 190 L86 220" stroke="#25384a" stroke-width="2"
+          fill="none" /><text class="diagram-label" x="65" y="244" text-anchor="middle">Learner</text>
+        <path class="diagram-arrow" d="M90 145 L260 83" />
+        <path class="diagram-arrow" d="M90 155 L260 128" />
+        <path class="diagram-arrow" d="M90 165 L260 176" />
+        <path class="diagram-arrow" d="M90 175 L260 224" />
+        <path class="diagram-arrow" d="M90 185 L260 270" />
+        <text class="diagram-label" x="675" y="126" text-anchor="middle">Ollama / ML</text><text class="diagram-label"
+          x="675" y="143" text-anchor="middle">service actor</text>
+        <path class="diagram-arrow" d="M480 128 L620 135" />
+        <path class="diagram-arrow" d="M480 176 L620 140" />
+        <path class="diagram-arrow" d="M480 224 L620 146" />
+        <path class="diagram-arrow" d="M480 270 L620 152" />
+      </svg>
+      <div class="caption">Figure 3.1: Primary external actor and supporting ML-service interactions.</div>
+    </div>
+    <p>The learner initiates all primary use cases. The backend mediates access to persistent data and calls the ML
+      service only for operations that need analysis, generation, grading, interview responses or transcription. The
+      provider is therefore a supporting service, not an independent user.</p>
+
+    <h4>3.3.2 Use Case Descriptions (Rational Unified Process Style)</h4>
+    <div class="no-break">
+      <p><strong>UC-01 — Register or Sign In</strong></p>
+      <p><strong>Primary actor:</strong> Learner. <strong>Preconditions:</strong> Application is reachable; learner has
+        a valid email and password for the selected action. <strong>Trigger:</strong> Learner submits the registration
+        or login form. <strong>Main flow:</strong> (1) System validates required fields. (2) For registration, the
+        service creates the account if the email is not already in use; for login, it verifies credentials. (3) On
+        success, the service issues an authentication token and the client opens the subject dashboard.
+        <strong>Alternatives:</strong> Invalid fields, duplicate email or rejected credentials return an error and leave
+        the user unauthenticated. <strong>Postconditions:</strong> Successful authentication establishes the user
+        context for subsequent requests.
+      </p>
+    </div>
+    <div class="no-break">
+      <p><strong>UC-02 — Create Subject and Topic</strong></p>
+      <p><strong>Primary actor:</strong> Authenticated learner. <strong>Preconditions:</strong> Valid authenticated
+        session. <strong>Trigger:</strong> Learner submits a subject or topic form. <strong>Main flow:</strong> (1)
+        Client sends the name and related parent identifier. (2) Backend validates the request and confirms parent
+        ownership. (3) Backend stores the new record and returns it to the client. <strong>Alternatives:</strong>
+        Missing/invalid names or a resource owned by another user are rejected. <strong>Postconditions:</strong> The
+        subject/topic is available within that learner’s workspace.</p>
+    </div>
+    <div class="no-break">
+      <p><strong>UC-03 — Upload and Analyze Past Papers</strong></p>
+      <p><strong>Primary actor:</strong> Authenticated learner. <strong>Preconditions:</strong> Learner owns a subject;
+        input is a supported PDF within configured upload limits. <strong>Trigger:</strong> Learner uploads a paper and
+        optionally supplies its year. <strong>Main flow:</strong> (1) Backend verifies subject ownership and stores the
+        file under a generated name. (2) Text is extracted from the PDF; if the normal extraction path yields no usable
+        text, the configured OCR flow may be used. (3) Paper metadata and text are associated with the subject. (4) On
+        analysis request, extracted questions are normalized, vectorized, clustered and compared across papers. (5)
+        Cluster and recurrence results are returned. <strong>Alternatives:</strong> Invalid PDF, unreadable scan, no
+        papers or unavailable ML service produce an explicit error. Failed upload processing removes the newly stored
+        file where possible. <strong>Postconditions:</strong> A successful upload is attached to its subject; analysis
+        is returned without changing the source paper.</p>
+    </div>
+    <div class="no-break">
+      <p><strong>UC-04 — Generate Practice Questions</strong></p>
+      <p><strong>Primary actor:</strong> Authenticated learner. <strong>Preconditions:</strong> Learner owns a subject
+        and has selected one or more topics. <strong>Trigger:</strong> Learner requests a practice set. <strong>Main
+          flow:</strong> (1) Backend composes a typed generation request with subject, topics, requested question type
+        and optional paper context. (2) ML service requests structured output from the configured language model. (3)
+        Response fields and question-specific rules are validated. (4) Usable questions are stored against their topic
+        and returned. <strong>Alternatives:</strong> Provider unavailable, malformed output or no valid questions are
+        reported as failure; invalid model items are not silently presented as questions.
+        <strong>Postconditions:</strong> Valid questions are available for later practice.
+      </p>
+    </div>
+    <div class="no-break">
+      <p><strong>UC-05 — Complete an Adaptive Quiz</strong></p>
+      <p><strong>Primary actor:</strong> Authenticated learner. <strong>Preconditions:</strong> Learner owns the
+        subject; a usable question pool exists. <strong>Trigger:</strong> Learner starts a quiz. <strong>Main
+          flow:</strong> (1) Backend creates a quiz session and selects the initial question. (2) Learner submits an
+        answer. (3) Backend records correctness, updates ability and answer counts, and chooses the next question
+        closest to current ability. (4) System returns answer feedback and progress. (5) Session ends at its configured
+        maximum or when no questions remain. <strong>Alternatives:</strong> An invalid session/question/answer is
+        rejected; subjective answers are submitted to the grading service and may be unavailable if that dependency is
+        down. <strong>Postconditions:</strong> Completed session records its status, counts and final estimate.</p>
+    </div>
+    <div class="no-break">
+      <p><strong>UC-06 — Practice an Interview</strong></p>
+      <p><strong>Primary actor:</strong> Authenticated learner. <strong>Preconditions:</strong> Interview service and,
+        for voice, browser microphone permission are available. <strong>Trigger:</strong> Learner chooses a subject or
+        engineering role, level and question count. <strong>Main flow:</strong> (1) Client requests the next interview
+        turn with prior conversation context. (2) ML service returns a question. (3) Learner types or records an answer.
+        (4) Recorded audio is sent through the protected transcription route; transcription text becomes the answer. (5)
+        Service evaluates the answer and returns feedback/score or the next question. (6) Session completes at the
+        selected limit. <strong>Alternatives:</strong> Microphone denial or transcription failure leaves text entry
+        available; service errors are displayed. <strong>Postconditions:</strong> Learner receives session feedback;
+        browser audio is not sent to an external speech provider by this design.</p>
+    </div>
+
+    <h3>3.4 Design Diagrams</h3>
+    <h4>3.4.1 Architecture Diagram and System Overview</h4>
+    <div class="figure">
+      <svg viewBox="0 0 760 330" role="img" aria-label="System architecture">
+        <defs>
+          <marker id="arrow3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="#25384a" />
+          </marker>
+        </defs>
+        <rect class="diagram-box" x="25" y="38" width="145" height="65" rx="7" /><text class="diagram-label" x="97"
+          y="65" text-anchor="middle">Browser client</text><text class="diagram-label" x="97" y="84"
+          text-anchor="middle">HTML / CSS / JS</text>
+        <rect class="diagram-box" x="225" y="38" width="150" height="65" rx="7" /><text class="diagram-label" x="300"
+          y="65" text-anchor="middle">Nginx frontend</text><text class="diagram-label" x="300" y="84"
+          text-anchor="middle">static app / proxy</text>
+        <rect class="diagram-box" x="425" y="38" width="150" height="65" rx="7" /><text class="diagram-label" x="500"
+          y="65" text-anchor="middle">Spring Boot API</text><text class="diagram-label" x="500" y="84"
+          text-anchor="middle">auth / services / JPA</text>
+        <rect class="diagram-box" x="620" y="38" width="120" height="65" rx="7" /><text class="diagram-label" x="680"
+          y="65" text-anchor="middle">PostgreSQL</text><text class="diagram-label" x="680" y="84"
+          text-anchor="middle">domain records</text>
+        <rect class="diagram-box" x="385" y="190" width="205" height="85" rx="7" /><text class="diagram-label" x="487"
+          y="215" text-anchor="middle">FastAPI ML service</text><text class="diagram-label" x="487" y="236"
+          text-anchor="middle">analysis • generation • grading</text><text class="diagram-label" x="487" y="255"
+          text-anchor="middle">OCR • transcription • interview</text>
+        <rect class="diagram-box" x="625" y="190" width="115" height="85" rx="7" /><text class="diagram-label" x="682"
+          y="215" text-anchor="middle">File volume</text><text class="diagram-label" x="682" y="236"
+          text-anchor="middle">PDF uploads</text><text class="diagram-label" x="682" y="255" text-anchor="middle">model
+          cache</text>
+        <rect class="diagram-box" x="80" y="190" width="190" height="85" rx="7" /><text class="diagram-label" x="175"
+          y="215" text-anchor="middle">Configured model endpoint</text><text class="diagram-label" x="175" y="236"
+          text-anchor="middle">Ollama-compatible API</text><text class="diagram-label" x="175" y="255"
+          text-anchor="middle">key set outside source</text>
+        <path d="M170 70 L220 70" class="diagram-arrow" /><text class="diagram-label" x="195" y="60"
+          text-anchor="middle">HTTPS / HTTP</text>
+        <path d="M375 70 L420 70" class="diagram-arrow" /><text class="diagram-label" x="397" y="60"
+          text-anchor="middle">/api</text>
+        <path d="M575 70 L615 70" class="diagram-arrow" /><text class="diagram-label" x="595" y="60"
+          text-anchor="middle">JPA</text>
+        <path d="M485 108 L485 185" class="diagram-arrow" /><text class="diagram-label" x="528" y="151">internal
+          key</text>
+        <path d="M620 103 C620 140 585 155 560 190" class="diagram-arrow" />
+        <path d="M380 220 L275 220" class="diagram-arrow" /><text class="diagram-label" x="327" y="210"
+          text-anchor="middle">model requests</text>
+      </svg>
+      <div class="caption">Figure 3.2: Logical deployment architecture. Docker Compose connects the frontend, API, ML
+        service and database; persistent volumes hold uploaded documents and the transcription model cache.</div>
+    </div>
+    <p>The browser interacts with the static application and API. Nginx serves frontend assets and routes API traffic
+      according to the deployment configuration. The Spring Boot service owns user-facing authentication, authorization,
+      domain operations and database access. It calls FastAPI using service-to-service configuration for
+      machine-learning tasks. FastAPI performs text clustering and calls the configured language-model endpoint for
+      generation and conversational tasks. PostgreSQL persists relational data, while file storage and the Whisper cache
+      use persistent Docker volumes. Each container is configured through environment variables; sensitive values must
+      not be committed.</p>
+    <h4>3.4.2 Sequence Diagram: Paper Upload and Analysis</h4>
+    <div class="figure">
+      <svg viewBox="0 0 760 300" role="img" aria-label="Sequence diagram for paper upload and analysis">
+        <defs>
+          <marker id="arrow4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="#25384a" />
+          </marker>
+        </defs>
+        <text class="diagram-label" x="75" y="25" text-anchor="middle">Learner</text><text class="diagram-label" x="225"
+          y="25" text-anchor="middle">Browser</text><text class="diagram-label" x="395" y="25"
+          text-anchor="middle">Spring API</text><text class="diagram-label" x="555" y="25" text-anchor="middle">ML
+          service</text><text class="diagram-label" x="695" y="25" text-anchor="middle">Database</text>
+        <path d="M75 35 V280 M225 35 V280 M395 35 V280 M555 35 V280 M695 35 V280" stroke="#888"
+          stroke-dasharray="4 4" />
+        <path d="M75 55 L220 55" class="diagram-arrow" /><text class="diagram-label" x="145" y="48"
+          text-anchor="middle">Select PDF</text>
+        <path d="M225 85 L390 85" class="diagram-arrow" /><text class="diagram-label" x="307" y="78"
+          text-anchor="middle">multipart upload</text>
+        <path d="M395 112 L690 112" class="diagram-arrow" /><text class="diagram-label" x="545" y="105"
+          text-anchor="middle">store metadata/text</text>
+        <path d="M395 138 L220 138" class="diagram-arrow" /><text class="diagram-label" x="307" y="131"
+          text-anchor="middle">upload response</text>
+        <path d="M75 167 L220 167" class="diagram-arrow" /><text class="diagram-label" x="145" y="160"
+          text-anchor="middle">Request analysis</text>
+        <path d="M225 193 L390 193" class="diagram-arrow" /><text class="diagram-label" x="307" y="186"
+          text-anchor="middle">analyze subject papers</text>
+        <path d="M395 219 L550 219" class="diagram-arrow" /><text class="diagram-label" x="472" y="212"
+          text-anchor="middle">paper text payload</text>
+        <path d="M555 245 L390 245" class="diagram-arrow" /><text class="diagram-label" x="472" y="238"
+          text-anchor="middle">clusters / hot questions</text>
+        <path d="M395 270 L220 270" class="diagram-arrow" /><text class="diagram-label" x="307" y="263"
+          text-anchor="middle">display results</text>
+      </svg>
+      <div class="caption">Figure 3.3: Sequence for paper upload followed by analysis; the ML service response is
+        mediated by the backend.</div>
+    </div>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-title">CHAPTER 4<br>IMPLEMENTATION AND TESTING</div>
+    <h3>4.1 Database Design</h3>
+    <p>The backend uses JPA entities mapped to relational tables. The following ER view summarizes the core relations
+      implemented in the domain model. A learner owns subjects; subjects contain topics and uploaded papers; topics
+      contain questions; quiz sessions refer to a learner and subject and maintain a question pool; answers link a
+      session to the question answered. Question options are persisted as an ordered element collection. The
+      many-to-many question pool is represented by a join table.</p>
+    <div class="figure">
+      <svg viewBox="0 0 760 370" role="img" aria-label="Entity relationship diagram">
+        <defs>
+          <marker id="arrow5" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="#25384a" />
+          </marker>
+        </defs>
+        <g>
+          <rect class="diagram-box" x="20" y="35" width="135" height="80" /><text class="diagram-label" x="87" y="54"
+            text-anchor="middle" font-weight="bold">USERS</text><text class="diagram-label" x="30" y="73">PK
+            id</text><text class="diagram-label" x="30" y="91">email, password, name</text>
+          <rect class="diagram-box" x="205" y="35" width="140" height="80" /><text class="diagram-label" x="275" y="54"
+            text-anchor="middle" font-weight="bold">SUBJECTS</text><text class="diagram-label" x="215" y="73">PK id,
+            name</text><text class="diagram-label" x="215" y="91">FK user_id</text>
+          <rect class="diagram-box" x="395" y="20" width="150" height="86" /><text class="diagram-label" x="470" y="40"
+            text-anchor="middle" font-weight="bold">TOPICS</text><text class="diagram-label" x="405" y="60">PK id,
+            name</text><text class="diagram-label" x="405" y="78">description</text><text class="diagram-label" x="405"
+            y="96">FK subject_id</text>
+          <rect class="diagram-box" x="595" y="20" width="150" height="106" /><text class="diagram-label" x="670" y="40"
+            text-anchor="middle" font-weight="bold">QUESTIONS</text><text class="diagram-label" x="605" y="60">PK id,
+            prompt, type</text><text class="diagram-label" x="605" y="78">difficulty, answer</text><text
+            class="diagram-label" x="605" y="96">FK topic_id</text>
+          <rect class="diagram-box" x="20" y="210" width="155" height="100" /><text class="diagram-label" x="97" y="230"
+            text-anchor="middle" font-weight="bold">QUESTION_PAPERS</text><text class="diagram-label" x="30" y="250">PK
+            id, filename, year</text><text class="diagram-label" x="30" y="270">extracted_text, uploaded_at</text><text
+            class="diagram-label" x="30" y="290">FK subject_id</text>
+          <rect class="diagram-box" x="250" y="210" width="155" height="100" /><text class="diagram-label" x="327"
+            y="230" text-anchor="middle" font-weight="bold">QUIZ_SESSIONS</text><text class="diagram-label" x="260"
+            y="250">PK id, status, counts</text><text class="diagram-label" x="260" y="270">ability,
+            max_questions</text><text class="diagram-label" x="260" y="290">FK user_id / subject_id</text>
+          <rect class="diagram-box" x="485" y="210" width="145" height="100" /><text class="diagram-label" x="557"
+            y="230" text-anchor="middle" font-weight="bold">QUIZ_ANSWERS</text><text class="diagram-label" x="495"
+            y="250">PK id, selected_index</text><text class="diagram-label" x="495" y="270">correct, ability
+            before/after</text><text class="diagram-label" x="495" y="290">FK session_id / question_id</text>
+          <rect class="diagram-box" x="650" y="225" width="95" height="70" /><text class="diagram-label" x="697" y="247"
+            text-anchor="middle" font-weight="bold">OPTIONS</text><text class="diagram-label" x="660"
+            y="267">question_id</text><text class="diagram-label" x="660" y="284">ordered text</text>
+        </g>
+        <path d="M155 75 L200 75" class="diagram-arrow" /><text class="diagram-label" x="176" y="67">1:N</text>
+        <path d="M345 75 L390 65" class="diagram-arrow" /><text class="diagram-label" x="360" y="61">1:N</text>
+        <path d="M545 65 L590 65" class="diagram-arrow" /><text class="diagram-label" x="561" y="57">1:N</text>
+        <path d="M275 120 C275 175 150 175 120 205" class="diagram-arrow" /><text class="diagram-label" x="194"
+          y="168">1:N</text>
+        <path d="M275 120 L320 205" class="diagram-arrow" /><text class="diagram-label" x="290" y="168">1:N</text>
+        <path d="M405 255 L480 255" class="diagram-arrow" /><text class="diagram-label" x="433" y="247">1:N</text>
+        <path d="M670 130 L620 210" class="diagram-arrow" /><text class="diagram-label" x="638" y="168">1:N</text>
+        <path d="M630 255 L645 255" class="diagram-arrow" /><text class="diagram-label" x="630" y="244">1:N</text>
+      </svg>
+      <div class="caption">Figure 4.1: Core entity-relationship model. PK denotes primary key; FK denotes foreign key;
+        1:N denotes one-to-many.</div>
+    </div>
+    <table>
+      <tr>
+        <th>Table</th>
+        <th>Representative fields</th>
+        <th>Purpose</th>
+      </tr>
+      <tr>
+        <td>users</td>
+        <td>id (PK), email (unique, required), bcrypt-hashed password, full_name (required)</td>
+        <td>Account identity and credential record; the service hashes passwords with BCrypt and verifies them through
+          the configured password encoder.</td>
+      </tr>
+      <tr>
+        <td>subjects</td>
+        <td>id (PK), name, user_id (FK)</td>
+        <td>Top-level learner-owned study area.</td>
+      </tr>
+      <tr>
+        <td>topics</td>
+        <td>id (PK), name, description, subject_id (FK)</td>
+        <td>Topic organization within a subject.</td>
+      </tr>
+      <tr>
+        <td>question_papers</td>
+        <td>id (PK), original_filename, stored_filename (unique), exam_year, uploaded_at, extracted_text, subject_id
+          (FK)</td>
+        <td>Paper metadata and extracted text; binary file is stored outside the relational row.</td>
+      </tr>
+      <tr>
+        <td>questions</td>
+        <td>id (PK), prompt, correct_index, question_type, reference_answer, explanation, difficulty, times_answered,
+          topic_id (FK)</td>
+        <td>Generated or curated question content and adaptive difficulty metadata.</td>
+      </tr>
+      <tr>
+        <td>question_options</td>
+        <td>question_id (FK), option_order, option_text</td>
+        <td>Ordered answer options persisted as an element collection.</td>
+      </tr>
+      <tr>
+        <td>quiz_sessions</td>
+        <td>id (PK), user_id (FK), subject_id (FK), max_questions, answered_count, correct_count, ability_estimate,
+          status, current_question_id (FK)</td>
+        <td>State and progress for an adaptive quiz.</td>
+      </tr>
+      <tr>
+        <td>quiz_session_questions</td>
+        <td>session_id (FK), question_id (FK), question_order</td>
+        <td>Ordered question pool associated with a quiz session.</td>
+      </tr>
+      <tr>
+        <td>quiz_answers</td>
+        <td>id (PK), session_id (FK), question_id (FK), selected_index, correct, ability_before, ability_after</td>
+        <td>Answer-level record supporting session progress and audit of ability changes.</td>
+      </tr>
+    </table>
+    <p class="small">The schema is created/updated by the JPA configuration in the current project. Before production
+      deployment, schema changes should be managed with explicit versioned migrations and retention/backup policies. The
+      database model does not store interview conversation history as a persistent entity in the core domain model shown
+      here.</p>
+
+    <h3>4.2 Class Design and Explanation</h3>
+    <p>The diagram below shows the central domain and service classes rather than every framework DTO, repository and
+      configuration class in the codebase. It reflects the project’s main responsibility boundaries.</p>
+    <div class="figure">
+      <svg viewBox="0 0 760 300" role="img" aria-label="Core class diagram">
+        <defs>
+          <marker id="arrow6" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="#25384a" />
+          </marker>
+        </defs>
+        <rect class="diagram-box" x="20" y="28" width="145" height="75" /><text class="diagram-label" x="92" y="48"
+          text-anchor="middle" font-weight="bold">User</text><text class="diagram-label" x="30" y="68">id, email,
+          name</text><text class="diagram-label" x="30" y="88">owns subjects</text>
+        <rect class="diagram-box" x="205" y="28" width="145" height="75" /><text class="diagram-label" x="277" y="48"
+          text-anchor="middle" font-weight="bold">Subject / Topic</text><text class="diagram-label" x="215"
+          y="68">organizes materials</text><text class="diagram-label" x="215" y="88">and questions</text>
+        <rect class="diagram-box" x="390" y="28" width="145" height="75" /><text class="diagram-label" x="462" y="48"
+          text-anchor="middle" font-weight="bold">Question / Paper</text><text class="diagram-label" x="400"
+          y="68">study content</text><text class="diagram-label" x="400" y="88">difficulty / source</text>
+        <rect class="diagram-box" x="575" y="28" width="165" height="75" /><text class="diagram-label" x="657" y="48"
+          text-anchor="middle" font-weight="bold">QuizSession / Answer</text><text class="diagram-label" x="585"
+          y="68">progress / outcome</text><text class="diagram-label" x="585" y="88">ability estimate</text>
+        <rect class="diagram-box" x="105" y="175" width="170" height="80" /><text class="diagram-label" x="190" y="198"
+          text-anchor="middle" font-weight="bold">QuestionPaperService</text><text class="diagram-label" x="115"
+          y="218">upload / list / delete</text><text class="diagram-label" x="115" y="238">text extraction
+          coordination</text>
+        <rect class="diagram-box" x="300" y="175" width="170" height="80" /><text class="diagram-label" x="385" y="198"
+          text-anchor="middle" font-weight="bold">SubjectAnalysisService</text><text class="diagram-label" x="310"
+          y="218">maps papers to ML request</text><text class="diagram-label" x="310" y="238">returns analysis
+          result</text>
+        <rect class="diagram-box" x="495" y="175" width="170" height="80" /><text class="diagram-label" x="580" y="198"
+          text-anchor="middle" font-weight="bold">QuizService / IrtEngine</text><text class="diagram-label" x="505"
+          y="218">session lifecycle / updates</text><text class="diagram-label" x="505" y="238">next-question
+          selection</text>
+        <path d="M165 65 L200 65" class="diagram-arrow" />
+        <path d="M350 65 L385 65" class="diagram-arrow" />
+        <path d="M535 65 L570 65" class="diagram-arrow" />
+        <path d="M275 215 L295 215" class="diagram-arrow" />
+        <path d="M470 215 L490 215" class="diagram-arrow" />
+        <path d="M200 108 L190 170" class="diagram-arrow" />
+        <path d="M462 108 L385 170" class="diagram-arrow" />
+        <path d="M650 108 L580 170" class="diagram-arrow" />
+      </svg>
+      <div class="caption">Figure 4.2: Core domain classes and coordinating services.</div>
+    </div>
+    <table>
+      <tr>
+        <th>Class / component</th>
+        <th>Purpose and principal behavior</th>
+      </tr>
+      <tr>
+        <td>User</td>
+        <td>JPA entity for account identity. Holds ID, email, credential value and full name; forms the ownership root
+          for user-specific subjects and quiz sessions.</td>
+      </tr>
+      <tr>
+        <td>Subject</td>
+        <td>JPA entity representing a learner’s study area. Associates to an owner and contains topics.</td>
+      </tr>
+      <tr>
+        <td>Topic</td>
+        <td>JPA entity representing a named topic and optional description within a subject.</td>
+      </tr>
+      <tr>
+        <td>QuestionPaper</td>
+        <td>JPA entity holding source filename, stored filename, exam year, upload timestamp, extracted text and owning
+          subject.</td>
+      </tr>
+      <tr>
+        <td>Question</td>
+        <td>JPA entity for a practice prompt, ordered options, answer metadata, question type, explanation, difficulty
+          and topic. It increments the number of answers and exposes question-type-aware accessors.</td>
+      </tr>
+      <tr>
+        <td>QuizSession</td>
+        <td>JPA entity that records learner, subject, maximum question count, progress, ability estimate, current
+          question, status and question pool. `recordAnswer` updates counters/ability; `finish` closes the session.</td>
+      </tr>
+      <tr>
+        <td>QuizAnswer</td>
+        <td>JPA entity linking an answer to its session and question, retaining selected option, correctness and ability
+          before/after the response.</td>
+      </tr>
+      <tr>
+        <td>IrtEngine</td>
+        <td>Stateless utility. `probabilityCorrect(ability, difficulty)` evaluates a logistic response probability;
+          `information` returns p(1-p); `updateAbility` and `updateDifficulty` apply bounded diminishing-step updates;
+          `selectNext` selects the candidate closest to estimated ability.</td>
+      </tr>
+      <tr>
+        <td>QuestionPaperService</td>
+        <td>Coordinates ownership validation, generated filename storage, PDF text extraction, persistence, listing,
+          re-extraction when text is missing and deletion. It cleans up a newly stored file when upload processing
+          fails.</td>
+      </tr>
+      <tr>
+        <td>SubjectAnalysisService</td>
+        <td>Loads a user’s subject papers, verifies readable text, maps data to the ML request and returns timestamped
+          analysis metadata.</td>
+      </tr>
+      <tr>
+        <td>ML service (`analyzer`, `llm_client`)</td>
+        <td>Python modules split and normalize questions, build TF-IDF features, cluster and identify recurring text.
+          The language-model client generates typed questions, grades subjective answers and manages interview turns.
+        </td>
+      </tr>
+    </table>
+
+    <h3>4.3 Test Cases and Results</h3>
+    <h4>4.3.1 Testing approach</h4>
+    <p>Unit tests cover deterministic algorithms and service-level rules; integration tests exercise multi-step API and
+      quiz flows; Python tests cover the ML service’s analysis, request handling, model-client behavior, OCR and
+      transcription. Manual browser testing should verify layout, validation, authentication, upload feedback, quiz
+      transitions, microphone permission and responsive behavior. The test evidence below distinguishes tests executed
+      in this report-preparation environment from results already recorded in the repository.</p>
+    <h4>4.3.2 Automated test evidence available</h4>
+    <table>
+      <tr>
+        <th>Suite / evidence</th>
+        <th>Test count</th>
+        <th>Recorded outcome</th>
+        <th>Evidence note</th>
+      </tr>
+      <tr>
+        <td>ML service pytest suite</td>
+        <td>35</td>
+        <td>35 passed</td>
+        <td>Executed during report preparation on 25 October 2026.</td>
+      </tr>
+      <tr>
+        <td>Backend IRT engine</td>
+        <td>14</td>
+        <td>14 passed</td>
+        <td>Existing Maven Surefire report in the repository.</td>
+      </tr>
+      <tr>
+        <td>Backend quiz flow integration</td>
+        <td>10</td>
+        <td>10 passed</td>
+        <td>Existing Maven Surefire report in the repository.</td>
+      </tr>
+      <tr>
+        <td>Backend quiz service</td>
+        <td>10</td>
+        <td>10 passed</td>
+        <td>Existing Maven Surefire report in the repository.</td>
+      </tr>
+      <tr>
+        <td>Backend application context</td>
+        <td>1</td>
+        <td>1 passed</td>
+        <td>Existing Maven Surefire report in the repository.</td>
+      </tr>
+      <tr>
+        <td>Backend PDF text extractor</td>
+        <td>1</td>
+        <td>1 passed</td>
+        <td>Existing Maven Surefire report in the repository.</td>
+      </tr>
+      <tr>
+        <td>Backend question paper service</td>
+        <td>1</td>
+        <td>1 passed</td>
+        <td>Existing Maven Surefire report in the repository.</td>
+      </tr>
+    </table>
+    <p>These recorded backend reports total 37 passing tests and contain no recorded failures or errors. A fresh Maven
+      test invocation during report preparation could not start because the Java runtime failed a native-memory
+      allocation. Therefore, the 37 backend passes refer to the checked-in workspace’s existing Surefire evidence and
+      are not represented as a fresh run. Browser end-to-end screenshots and external-provider live tests were not
+      captured for this report.</p>
+    <h4>4.3.3 Representative functional test cases</h4>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Scenario and input</th>
+        <th>Expected result</th>
+        <th>Observed evidence/status</th>
+      </tr>
+      <tr>
+        <td>TC-01</td>
+        <td>Register with valid unique email, name and password.</td>
+        <td>Account is created and authenticated user reaches the subject dashboard.</td>
+        <td>Automated backend application test exists; re-check with deployment credentials.</td>
+      </tr>
+      <tr>
+        <td>TC-02</td>
+        <td>Sign in with invalid credentials.</td>
+        <td>Authentication is rejected and an error is displayed; no protected data is returned.</td>
+        <td>Manual UI verification required.</td>
+      </tr>
+      <tr>
+        <td>TC-03</td>
+        <td>Create a subject and topic using non-empty names.</td>
+        <td>Records are persisted and appear in the learner’s subject workflow.</td>
+        <td>Manual UI verification required.</td>
+      </tr>
+      <tr>
+        <td>TC-04</td>
+        <td>Upload a valid text-based PDF to an owned subject with a year.</td>
+        <td>Paper metadata and extracted text are stored; file is listed for the subject.</td>
+        <td>PDF extractor and paper-service backend tests are recorded as passing.</td>
+      </tr>
+      <tr>
+        <td>TC-05</td>
+        <td>Upload malformed/unsupported PDF or a scan with no legible text.</td>
+        <td>Action fails with a useful validation message and does not leave a successful-looking record.</td>
+        <td>PDF/OCR Python tests pass; verify with representative documents before submission.</td>
+      </tr>
+      <tr>
+        <td>TC-06</td>
+        <td>Analyze a subject with papers containing similar questions across different years.</td>
+        <td>Question clusters and repeated-question records include source paper/year metadata.</td>
+        <td>ML analyzer tests are included in the 35 passing pytest tests.</td>
+      </tr>
+      <tr>
+        <td>TC-07</td>
+        <td>Request multiple-choice generation for a topic.</td>
+        <td>Each accepted item has four options, one valid correct index and topic metadata.</td>
+        <td>ML generation contract tests are included in the 35 passing pytest tests; live provider not exercised here.
+        </td>
+      </tr>
+      <tr>
+        <td>TC-08</td>
+        <td>Answer correct and incorrect questions at different estimated abilities.</td>
+        <td>Ability is bounded and updated; next question is selected from the remaining pool near estimated ability.
+        </td>
+        <td>IRT (14) and quiz flow (10) recorded tests pass.</td>
+      </tr>
+      <tr>
+        <td>TC-09</td>
+        <td>Submit a subjective response of at least the configured minimum length.</td>
+        <td>Response receives a normalized score and constructive feedback; provider errors are surfaced.</td>
+        <td>Live model-provider result not verified in this test run.</td>
+      </tr>
+      <tr>
+        <td>TC-10</td>
+        <td>Complete a subject/engineering interview with typed answers.</td>
+        <td>Turns advance, feedback is returned, and the session ends at the configured count.</td>
+        <td>API/unit coverage exists; verify against a configured model endpoint.</td>
+      </tr>
+      <tr>
+        <td>TC-11</td>
+        <td>Deny microphone permission, then submit a typed response.</td>
+        <td>Voice capture is unavailable but typed answer remains usable.</td>
+        <td>Manual browser verification required.</td>
+      </tr>
+      <tr>
+        <td>TC-12</td>
+        <td>Attempt to access another user’s subject/paper.</td>
+        <td>Backend rejects cross-user access and does not disclose the resource.</td>
+        <td>Ownership checks exist in service flow; add/execute explicit authorization tests before production.</td>
+      </tr>
+    </table>
+    <div class="note"><strong>Submission evidence still required:</strong> Capture real screenshots of
+      registration/login, subject dashboard, paper upload/analysis, quiz feedback and interview setup/session in the
+      configured application. Add each image with a caption, test input, expected result and observed result. No mock
+      screen is presented as a runtime screenshot in this draft.</div>
+  </section>
+
+  <section class="chapter">
+    <div class="chapter-title">CHAPTER 5<br>CONCLUSION</div>
+    <h3>5.1 Conclusion</h3>
+    <p>Smart Study demonstrates an integrated web application for organizing examination preparation around
+      learner-supplied subject material. Its implemented workflow connects account-scoped subjects and topics, PDF paper
+      ingestion, question and recurrence analysis, generated practice, adaptive quiz sessions, subjective feedback and
+      interview rehearsal. A Java API coordinates persistent domain operations, while a Python ML service isolates text
+      analysis, language-model interaction, OCR and speech transcription. Docker Compose describes a repeatable local
+      multi-service deployment.</p>
+    <p>The project also demonstrates how a simple ability estimate can influence practice selection. The implemented
+      logistic update and nearest-difficulty selection make quiz sessions responsive to learner answers, while remaining
+      intentionally simpler than a fully calibrated item-response assessment. Automated Python tests executed for this
+      report passed 35 tests. Existing backend test reports record 37 passing tests across six suites, but the fresh
+      backend test command could not run in the available environment because of JVM native-memory allocation failure.
+      These results support important implementation paths; they do not establish educational effectiveness, model
+      accuracy, accessibility compliance, load capacity or production readiness.</p>
+    <p>The main practical value is workflow integration rather than a claim that automated generation or clustering is
+      inherently superior to instructor-authored learning. Uploaded paper quality, correct user configuration, reliable
+      model responses, review of generated items and secure operations remain necessary. Before institutional submission
+      or broader use, the team should complete real-browser screenshots, verify the full deployment with its approved
+      provider configuration, add explicit authorization and failure-path tests, inspect model output quality with
+      educators, and update this document with authentic student, guide and plagiarism-check details.</p>
+    <h3>5.2 Limitations</h3>
+    <ul>
+      <li>TF-IDF and lexical similarity may miss paraphrases or create false matches; cluster labels are descriptive
+        terms, not validated syllabus topics.</li>
+      <li>Question generation and subjective grading depend on an external language model and can be incorrect,
+        inconsistent or biased.</li>
+      <li>The adaptive algorithm is a simplified pedagogical heuristic; it has not been calibrated on a representative
+        learner/item dataset.</li>
+      <li>OCR accuracy varies with scan quality, layout and language; extraction should be inspected before relying on
+        results.</li>
+      <li>No controlled learner study, formal accessibility review, production load test or availability evaluation is
+        included in the current evidence.</li>
+      <li>The current local deployment requires operator-provided secrets, database setup and model-service
+        configuration.</li>
+    </ul>
+    <h3>5.3 Future Scope</h3>
+    <ul>
+      <li>Conduct educator and learner evaluation; measure task completion, usefulness, question quality and learning
+        outcomes.</li>
+      <li>Add instructor review/approval workflows and citations to the uploaded source passages behind generated
+        questions.</li>
+      <li>Improve semantic matching with embedding-based retrieval, while retaining transparent thresholds and human
+        review.</li>
+      <li>Evaluate calibrated IRT models using sufficient response data, item calibration, uncertainty estimates and
+        privacy-preserving analytics.</li>
+      <li>Add versioned database migrations, retention controls, backups, accessibility testing, security assessment and
+        operational monitoring.</li>
+      <li>Support more document types and languages after measuring extraction accuracy and defining data-handling
+        requirements.</li>
+    </ul>
+  </section>
+
+  <section class="endmatter">
+    <h1>REFERENCES</h1>
+    <ol class="refs">
+      <li>F. M. Lord, M. R. Novick and A. Birnbaum, <em>Statistical Theories of Mental Test Scores</em>, Addison-Wesley,
+        1968.</li>
+      <li>F. B. Baker and S.-H. Kim, <em>Item Response Theory: Parameter Estimation Techniques</em>, 2nd ed., Marcel
+        Dekker, 2004.</li>
+      <li>G. Salton and M. J. McGill, <em>Introduction to Modern Information Retrieval</em>, McGraw-Hill, 1983.</li>
+      <li>J. MacQueen, “Some Methods for Classification and Analysis of Multivariate Observations,” in <em>Proceedings
+          of the Fifth Berkeley Symposium on Mathematical Statistics and Probability</em>, vol. 1, pp. 281–297, 1967.
+      </li>
+      <li>P. J. Rousseeuw, “Silhouettes: A Graphical Aid to the Interpretation and Validation of Cluster Analysis,”
+        <em>Journal of Computational and Applied Mathematics</em>, vol. 20, pp. 53–65, 1987.
+      </li>
+      <li>Moodle Documentation, “Quiz activity.” Available at: <a
+          href="https://docs.moodle.org/en/Quiz_activity">https://docs.moodle.org/en/Quiz_activity</a>. Accessed 25
+        October 2026.</li>
+      <li>Quizlet, “Study with flashcards and learning tools.” Available at: <a
+          href="https://quizlet.com/">https://quizlet.com/</a>. Accessed 25 October 2026.</li>
+      <li>Khan Academy, “Practice.” Available at: <a
+          href="https://www.khanacademy.org/">https://www.khanacademy.org/</a>. Accessed 25 October 2026.</li>
+      <li>Spring, “Spring Boot Reference Documentation.” Available at: <a
+          href="https://docs.spring.io/spring-boot/reference/">https://docs.spring.io/spring-boot/reference/</a>.
+        Accessed 25 October 2026.</li>
+      <li>FastAPI, “FastAPI Documentation.” Available at: <a
+          href="https://fastapi.tiangolo.com/">https://fastapi.tiangolo.com/</a>. Accessed 25 October 2026.</li>
+      <li>PostgreSQL Global Development Group, “PostgreSQL Documentation.” Available at: <a
+          href="https://www.postgresql.org/docs/">https://www.postgresql.org/docs/</a>. Accessed 25 October 2026.</li>
+      <li>scikit-learn developers, “Clustering” and “Feature extraction.” Available at: <a
+          href="https://scikit-learn.org/stable/">https://scikit-learn.org/stable/</a>. Accessed 25 October 2026.</li>
+      <li>Ollama, “Ollama API documentation.” Available at: <a
+          href="https://docs.ollama.com/">https://docs.ollama.com/</a>. Accessed 25 October 2026.</li>
+      <li>SYSTRAN, “Faster-Whisper: Faster Whisper transcription with CTranslate2.” Available at: <a
+          href="https://github.com/SYSTRAN/faster-whisper">https://github.com/SYSTRAN/faster-whisper</a>. Accessed 25
+        October 2026.</li>
+      <li>Project source repository, <em>Smart Study</em>: README, backend source, frontend source, ML service source,
+        and automated tests. Repository workspace reviewed on 25 October 2026.</li>
+    </ol>
+  </section>
+
+  <section class="endmatter">
+    <h1>APPENDIX A — USER WORKFLOW AND API SUMMARY</h1>
+    <h3>A.1 Suggested demonstration workflow</h3>
+    <ol>
+      <li>Start the services using the Docker Compose instructions in the project README and provide locally generated
+        secrets and model-provider configuration.</li>
+      <li>Register a demonstration account and create a subject and topic.</li>
+      <li>Upload a legally usable sample question-paper PDF and verify its extracted text and year.</li>
+      <li>Run analysis and inspect clusters and recurring questions against the original paper.</li>
+      <li>Generate a practice set; review generated questions for correctness before attempting them.</li>
+      <li>Take a short quiz and observe feedback and question progression.</li>
+      <li>Run a typed interview session. If using voice, grant microphone permission and verify transcription before
+        submitting the answer.</li>
+      <li>Capture actual application screenshots for the final printed report, avoiding real credentials and personal
+        data.</li>
+    </ol>
+    <h3>A.2 Selected API surface</h3>
+    <table>
+      <tr>
+        <th>Route family</th>
+        <th>Purpose</th>
+      </tr>
+      <tr>
+        <td><code>/api/auth/register</code>, <code>/api/auth/login</code></td>
+        <td>Account registration and login.</td>
+      </tr>
+      <tr>
+        <td><code>/api/subjects</code>, <code>/api/subjects/{id}/topics</code></td>
+        <td>Subject and topic organization.</td>
+      </tr>
+      <tr>
+        <td><code>/api/subjects/{id}/papers</code>, <code>/api/papers/{id}/text</code></td>
+        <td>Paper upload, listing, extracted text and deletion.</td>
+      </tr>
+      <tr>
+        <td><code>/api/subjects/{id}/analysis</code></td>
+        <td>Past-paper question analysis.</td>
+      </tr>
+      <tr>
+        <td><code>/api/subjects/{id}/questions/generate-from-papers</code></td>
+        <td>Generate questions using subject paper material.</td>
+      </tr>
+      <tr>
+        <td><code>/api/topics/{id}/questions/generate</code></td>
+        <td>Generate questions for a topic.</td>
+      </tr>
+      <tr>
+        <td><code>/api/subjects/{id}/quiz</code>, <code>/api/quiz/{sessionId}/answer</code></td>
+        <td>Start and answer a quiz; subjective-answer route is provided separately.</td>
+      </tr>
+      <tr>
+        <td><code>/api/interview/turn</code>, <code>/api/interview/transcribe</code></td>
+        <td>Interview question/feedback turn and authenticated transcription relay.</td>
+      </tr>
+    </table>
+    <p class="small">Exact request schemas, authorization rules and error responses are defined by the current backend
+      controllers, DTOs and ML service schemas; consult source/API documentation before integrating another client.</p>
+  </section>
+
+  <section class="endmatter">
+    <h1>APPENDIX B — SUBMISSION COMPLETION CHECKLIST</h1>
+    <table>
+      <tr>
+        <th>Item</th>
+        <th>Action before binding/submission</th>
+        <th>Status in this draft</th>
+      </tr>
+      <tr>
+        <td>Project title</td>
+        <td>Confirm title wording and capitalization with department.</td>
+        <td>Drafted from repository purpose.</td>
+      </tr>
+      <tr>
+        <td>Student names and roll numbers</td>
+        <td>Replace all bracketed team-member fields on cover, declaration and plagiarism page.</td>
+        <td>Required from team.</td>
+      </tr>
+      <tr>
+        <td>Branch, department and session</td>
+        <td>Enter official branch, department name and academic session.</td>
+        <td>Required from team.</td>
+      </tr>
+      <tr>
+        <td>Guide and HOD</td>
+        <td>Enter official names/designations; obtain signatures and seal as required.</td>
+        <td>Required from institute/team.</td>
+      </tr>
+      <tr>
+        <td>Plagiarism result</td>
+        <td>Run the approved institutional tool on the final report and enter its actual similarity percentage.</td>
+        <td>Intentionally blank.</td>
+      </tr>
+      <tr>
+        <td>Application screenshots</td>
+        <td>Capture actual screens and add user input, expected output and observed result for each.</td>
+        <td>Not captured; do not substitute illustrative diagrams.</td>
+      </tr>
+      <tr>
+        <td>Table of contents pages</td>
+        <td>Refresh chapter page references after screenshots and final pagination.</td>
+        <td>Chapter references intentionally left blank.</td>
+      </tr>
+      <tr>
+        <td>References</td>
+        <td>Verify source details/URLs and add any additional material actually consulted.</td>
+        <td>Draft references included.</td>
+      </tr>
+      <tr>
+        <td>Final technical verification</td>
+        <td>Run backend and ML tests in the project’s intended environment; record exact command, date and outcomes.
+        </td>
+        <td>ML suite passed; backend fresh run blocked by host JVM memory.</td>
+      </tr>
+      <tr>
+        <td>Print format</td>
+        <td>Use Times New Roman, justified text, 1.5 line spacing, required paper and color prints per institute
+          instruction.</td>
+        <td>Print-ready HTML/PDF uses Times New Roman, A4, and 1.5 body line spacing.</td>
+      </tr>
+    </table>
+    <div class="note"><strong>Draft status:</strong> This report is based on the project source and README available in
+      the workspace. It is not a substitute for team review, guide approval, verified screenshots, institutional
+      plagiarism checking or correction of bracketed details.</div>
+  </section>
+
+</body>
+
+</html>

@@ -7,7 +7,7 @@ Smart Study turns previous exam papers into generated practice questions, suppor
 Prerequisites:
 
 - Docker Desktop running with the Linux containers engine
-- An Ollama Cloud API key (or a reachable Ollama endpoint configured in `.env`)
+- An Ollama Cloud API key (or a reachable Ollama endpoint configured for the ML service)
 - Git, if cloning this repository
 
 1. Clone the repository:
@@ -29,7 +29,9 @@ Prerequisites:
    [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
    ```
 
-   Use separate generated values for `JWT_SECRET` and `ML_INTERNAL_KEY`. Set `POSTGRES_PASSWORD` to a new database password and `OLLAMA_API_KEY` to your own provider key. Do not commit `.env` or share credentials in chat.
+   Use separate generated values for `JWT_SECRET` and `ML_INTERNAL_KEY`. Set `POSTGRES_PASSWORD` to a new database password. Do not commit `.env` or share credentials in chat.
+
+   Set your provider key as `OLLAMA_API_KEY` in `ml_services/.env` (create the file if it does not exist). The ML container reads this file at startup. It is ignored by Git and is not included in the container image.
 
 3. Start the application:
 
@@ -64,4 +66,4 @@ To delete the local database and uploads as well, use `docker compose --env-file
 
 Docker Compose builds the backend and ML service images from the adjacent `backend` and `ml_services` folders. Each teammate should provide their own `.env`; provider keys and signing secrets are not included in this repository.
 
-Browser microphone access and speech recognition depend on the browser. Text entry remains available when speech recognition is unavailable.
+Interview dictation records audio in the browser and transcribes it with the local CPU Whisper model in the ML container, so it also works in Firefox and does not send audio to an external speech provider. The first recording downloads the configured model (`WHISPER_MODEL`, default `base`); Docker Compose persists it in the `whisper-cache` volume. Microphone access requires localhost or HTTPS. Text entry remains available if recording or transcription is unavailable.

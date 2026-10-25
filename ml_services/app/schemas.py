@@ -52,6 +52,7 @@ class AnalyzeResponse(CamelModel):
 class GenerateRequest(CamelModel):
     subject_name: str = Field(min_length=1)
     topic_name: str = Field(min_length=1)
+    topic_names: list[str] | None = None
     count: int = Field(default=5, ge=1, le=20)
     context: str | None = None
     question_type: Literal["multiple_choice", "subjective"] = "multiple_choice"
@@ -59,6 +60,7 @@ class GenerateRequest(CamelModel):
 
 class GeneratedQuestion(CamelModel):
     prompt: str
+    topic_name: str | None = None
     question_type: Literal["multiple_choice", "subjective"] = "multiple_choice"
     options: list[str] = Field(default_factory=list)
     correct_index: int | None = None

@@ -6,7 +6,10 @@
     quiz: null,
     generated: null,
     interview: null,
-    voiceRecognition: null,
+    voiceRecorder: null,
+    voiceStream: null,
+    voiceChunks: [],
+    voiceCaptureCancelled: false,
   };
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) =>
@@ -214,8 +217,8 @@
           <label>Number of questions
             <input name="questionCount" type="number" min="1" max="20" value="5" required>
           </label>
-          <p class="interview-privacy">Voice recognition is provided by your browser and may be processed by its speech service.
-            Your answer (typed or recognized) is sent to the configured Smart Study AI service for feedback. You can use text input instead.</p>
+          <p class="interview-privacy">Voice recordings are transcribed by the local Smart Study service and are not sent to an external speech provider.
+            Your answer text is sent to the configured AI service for feedback. You can type your answer instead.</p>
           <button class="button button-primary" data-busy="Preparing your interview…">
             Start interview ${icon("arrow")}
           </button>
@@ -272,7 +275,7 @@
             placeholder="Type your answer, or use the microphone to dictate…" required></textarea>
           <div class="interview-controls">
             <button type="button" class="button button-secondary" data-action="listenAnswer">
-              ${icon("microphone")} Use microphone
+              ${icon("microphone")} Record answer
             </button>
             <button class="button button-primary" data-busy="Listening to your answer…">
               Submit answer ${icon("arrow")}
@@ -370,7 +373,7 @@
             </div>
             <div class="pipeline-progress" id="pipeline-progress" hidden aria-live="polite">
               <span class="spinner"></span><span><strong>Pipeline in progress</strong>
-                <small>Reading papers, finding topics and preparing your questions…</small></span>
+                <small>Reading papers (including OCR for scans), finding topics and preparing your questions. Large scans can take several minutes; keep this page open.</small></span>
             </div>
           </form>
         </div>
@@ -378,11 +381,11 @@
           <span class="side-panel-icon">${icon("chart")}</span><span class="eyebrow">WHAT HAPPENS NEXT</span>
           <h3>From old papers to fresh practice</h3>
           <ul class="process-list">
-            <li><span>01</span><div><strong>Read</strong><small>Question text is extracted from your PDFs.</small></div></li>
+            <li><span>01</span><div><strong>Read</strong><small>Text is extracted; scanned pages use OCR.</small></div></li>
             <li><span>02</span><div><strong>Understand</strong><small>Recurring topics and exam patterns are identified.</small></div></li>
             <li><span>03</span><div><strong>Create</strong><small>New questions are generated across those topics.</small></div></li>
           </ul>
-          <p class="side-note">You can review your questions before starting a quiz.</p>
+          <p class="side-note">Scanned pages are read with OCR. Clear, upright scans work best. Review your questions before starting a quiz.</p>
         </aside>
       </section>
       <section id="generated-section" class="generated-section" hidden></section>
@@ -663,34 +666,102 @@
       if (!state.interview?.currentQuestion) return;
       speakText(state.interview.currentQuestion);
     },
-    listenAnswer() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        throw new Error("Speech recognition is not supported in this browser. Type your answer instead.");
+    async listenAnswer() {
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        throw new Error("Audio recording is not supported in this browser. Type your answer instead.");
       }
-      const recognition = new SpeechRecognition();
-      state.voiceRecognition = recognition;
-      recognition.lang = navigator.language || "en-US";
-      recognition.interimResults = true;
-      recognition.continuous = false;
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+          throw new Error("Microphone access was denied. Allow it in your browser and try again.");
+        }
+        if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+          throw new Error("No microphone was detected. Connect a microphone or type your answer.");
+        }
+        throw new Error(`Could not access the microphone (${error.message}).`);
+      }
+
+      const mimeType = [
+        "audio/webm;codecs=opus",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
+      ].find((type) => MediaRecorder.isTypeSupported(type));
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      } catch (error) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error(`Could not start audio recording (${error.message}).`);
+      }
+
       const button = document.querySelector('[data-action="listenAnswer"]');
-      button.textContent = "Listening…";
-      recognition.onresult = (event) => {
-        $("interview-answer").value = Array.from(event.results)
-          .map((result) => result[0].transcript).join(" ");
+      const chunks = [];
+      state.voiceCaptureCancelled = false;
+      state.voiceStream = stream;
+      state.voiceRecorder = recorder;
+      state.voiceChunks = chunks;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunks.push(event.data);
       };
-      recognition.onerror = (event) => {
-        showMsg(event.error === "not-allowed"
-          ? "Microphone access was denied. Allow it in your browser or type your answer."
-          : `Speech recognition failed (${event.error}). Please type your answer.`);
+      recorder.onerror = () => {
+        state.voiceCaptureCancelled = true;
+        stream.getTracks().forEach((track) => track.stop());
+        const currentButton = document.querySelector('[data-action="stopVoiceAnswer"]');
+        if (currentButton) {
+          currentButton.dataset.action = "listenAnswer";
+          currentButton.innerHTML = `${icon("microphone")} Record answer`;
+        }
+        showMsg("Audio recording failed. Check your microphone and try again.");
       };
-      return new Promise((resolve) => {
-        recognition.onend = () => {
-          state.voiceRecognition = null;
-          resolve();
-        };
-        recognition.start();
-      });
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        state.voiceRecorder = null;
+        state.voiceStream = null;
+        state.voiceChunks = [];
+        if (state.voiceCaptureCancelled || !state.interview) return;
+
+        const answerField = $("interview-answer");
+        const listenButton = document.querySelector('[data-action="listenAnswer"]');
+        if (!chunks.length) {
+          showMsg("No audio was recorded. Try again or type your answer.");
+          return;
+        }
+        listenButton.disabled = true;
+        listenButton.innerHTML = '<span class="spinner spinner-small"></span>Transcribing on device…';
+        try {
+          const audioType = recorder.mimeType || "audio/webm";
+          const extension = audioType.includes("ogg") ? "ogg"
+            : audioType.includes("mp4") ? "mp4" : "webm";
+          const audio = new Blob(chunks, { type: audioType });
+          const form = new FormData();
+          form.append("file", audio, `interview-answer.${extension}`);
+          form.append("language", navigator.language || "en-US");
+          const transcript = await api("/interview/transcribe", { method: "POST", form });
+          answerField.value = [answerField.value.trim(), transcript.text]
+            .filter(Boolean).join("\n");
+          showMsg("Your recording was transcribed locally.", "success");
+        } catch (error) {
+          showMsg(error.message || "Could not transcribe the recording. Type your answer instead.");
+        } finally {
+          const currentButton = document.querySelector('[data-action="listenAnswer"]');
+          if (currentButton) {
+            currentButton.disabled = false;
+            currentButton.innerHTML = `${icon("microphone")} Record answer`;
+          }
+        }
+      };
+      recorder.start();
+      button.dataset.action = "stopVoiceAnswer";
+      button.innerHTML = `${icon("close")} Stop recording`;
+    },
+    stopVoiceAnswer() {
+      if (!state.voiceRecorder || state.voiceRecorder.state === "inactive") return;
+      state.voiceCaptureCancelled = false;
+      const button = document.querySelector('[data-action="stopVoiceAnswer"]');
+      button.dataset.action = "listenAnswer";
+      state.voiceRecorder.stop();
     },
     async startGeneratedQuiz(button) {
       if (!state.generated?.questions?.length) throw new Error("Generate a question set first.");
@@ -737,9 +808,14 @@
   }
 
   function stopVoiceRecognition() {
-    if (!state.voiceRecognition) return;
-    state.voiceRecognition.abort();
-    state.voiceRecognition = null;
+    state.voiceCaptureCancelled = true;
+    if (state.voiceRecorder && state.voiceRecorder.state !== "inactive") {
+      state.voiceRecorder.stop();
+    }
+    state.voiceStream?.getTracks().forEach((track) => track.stop());
+    state.voiceRecorder = null;
+    state.voiceStream = null;
+    state.voiceChunks = [];
   }
 
   function setBusy(button, busy, label) {
@@ -795,6 +871,9 @@
       showMsg(error.message || "Something went wrong. Please try again.");
     } finally {
       restore();
+      if (button.dataset.action === "stopVoiceAnswer") {
+        button.innerHTML = `${icon("close")} Stop recording`;
+      }
     }
   });
 

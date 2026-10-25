@@ -1,7 +1,11 @@
 fastapi
+faster-whisper
 httpx
 ollama
+pdf2image
+pytesseract
 pydantic
+python-multipart
 python-dotenv
 scikit-learn
 torch

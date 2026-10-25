@@ -44,12 +44,39 @@ public class QuestionPaperService {
                 storageService.deleteQuietly(storedName);
             }
             throw new IllegalArgumentException("Could not read this file as a PDF");
+        } catch (RuntimeException e) {
+            if (storedName != null) {
+                storageService.deleteQuietly(storedName);
+            }
+            throw e;
         }
     }
 
     public List<QuestionPaper> listForSubject(Long subjectId, User owner) {
         subjectService.getSubjectByIdForUser(subjectId, owner);
-        return paperRepository.findBySubjectId(subjectId);
+        return paperRepository.findBySubjectId(subjectId).stream()
+                .map(this::extractTextIfMissing)
+                .toList();
+    }
+
+    private QuestionPaper extractTextIfMissing(QuestionPaper paper) {
+        if (paper.getExtractedText() != null && !paper.getExtractedText().isBlank()) {
+            return paper;
+        }
+        try {
+            String text = textExtractor.extractText(storageService.resolve(paper.getStoredFilename()));
+            if (text == null || text.isBlank()) {
+                throw new IllegalArgumentException(
+                        "No readable text could be recognized in " + paper.getOriginalFilename()
+                                + ". Try a clearer scan.");
+            }
+            paper.setExtractedText(text);
+            return paperRepository.save(paper);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException(
+                    "Could not re-read " + paper.getOriginalFilename() + ". Please upload it again.",
+                    exception);
+        }
     }
 
     public QuestionPaper getForUser(Long paperId, User owner) {

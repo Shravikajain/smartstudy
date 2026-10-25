@@ -3,7 +3,6 @@ import re
 from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics import silhouette_score
-from sklearn.metrics.pairwise import cosine_similarity
 
 from .question_splitter import split_questions
 from .schemas import AnalyzeRequest, AnalyzeResponse, ClusterOut, HotQuestionOut, QuestionOut
@@ -49,10 +48,15 @@ def choose_k(X, max_k: int) -> int:
         return 1
     best_k, best_score = 2, -1.0
     for k in range(2, upper + 1):
-        labels = KMeans(n_clusters=k, n_init=10, random_state=42).fit_predict(X)
+        labels = KMeans(n_clusters=k, n_init=3, random_state=42).fit_predict(X)
         if len(set(labels)) < 2:
             continue
-        score = silhouette_score(X, labels)
+        score = silhouette_score(
+            X,
+            labels,
+            sample_size=min(500, n),
+            random_state=42,
+        )
         if score > best_score:
             best_k, best_score = k, score
     return best_k
@@ -60,12 +64,12 @@ def choose_k(X, max_k: int) -> int:
 
 def find_hot_questions(X, questions: list[QuestionOut], threshold: float) -> list[HotQuestionOut]:
     n = len(questions)
-    sim = cosine_similarity(X)
+    similarities = (X @ X.T).tocoo()
     ds = DisjointSet(n)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if questions[i].paper_id != questions[j].paper_id and sim[i, j] >= threshold:
-                ds.union(i, j)
+    for i, j, similarity in zip(similarities.row, similarities.col, similarities.data):
+        if (i < j and questions[i].paper_id != questions[j].paper_id
+                and similarity >= threshold):
+            ds.union(i, j)
 
     groups: dict[int, list[int]] = {}
     for i in range(n):
@@ -104,7 +108,7 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         raise ValueError("The questions contained no usable words")
 
     k = choose_k(X, req.max_clusters)
-    km = KMeans(n_clusters=k, n_init=10, random_state=42).fit(X)
+    km = KMeans(n_clusters=k, n_init=5, random_state=42).fit(X)
     terms = vectorizer.get_feature_names_out()
     total_papers = len(req.papers)
 

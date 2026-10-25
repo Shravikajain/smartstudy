@@ -83,7 +83,12 @@ public class PaperQuestionGenerationService {
                     "No topics could be identified in these papers. Upload readable past-paper PDFs.");
         }
 
-        List<Draft> drafts = generateDrafts(subject.getName(), clusters, count, format);
+        List<String> topicNames = new ArrayList<>(clusters.size());
+        for (int i = 0; i < clusters.size(); i++) {
+            topicNames.add(topicName(clusters.get(i), i));
+        }
+        String context = topicContext(clusters, topicNames);
+        List<Draft> drafts = generateDrafts(subject.getName(), topicNames, context, count, format);
         Map<String, Topic> topicsByName = new HashMap<>();
         for (Topic existing : topicRepository.findBySubjectId(subjectId)) {
             topicsByName.put(existing.getName().toLowerCase(Locale.ROOT), existing);
@@ -114,42 +119,36 @@ public class PaperQuestionGenerationService {
         return new GeneratedSet(inferredTopics, savedQuestions);
     }
 
-    private List<Draft> generateDrafts(String subjectName, List<MlCluster> clusters, int count,
-                                       String format) {
+    private List<Draft> generateDrafts(String subjectName, List<String> topicNames, String context,
+                                       int count, String format) {
         List<Draft> drafts = new ArrayList<>(count);
-        int baseCount = count / clusters.size();
-        int extra = count % clusters.size();
+        int baseCount = count / topicNames.size();
+        int extra = count % topicNames.size();
         int questionOffset = 0;
 
-        for (int i = 0; i < clusters.size() && drafts.size() < count; i++) {
+        int multipleChoiceCount = 0;
+        for (int i = 0; i < topicNames.size(); i++) {
             int topicCount = baseCount + (i < extra ? 1 : 0);
             if (topicCount == 0) {
                 continue;
             }
-            MlCluster cluster = clusters.get(i);
-            String topicName = topicName(cluster, i);
-            String context = topicContext(cluster);
-            int multipleChoiceCount;
             if (format.equals("mixed")) {
-                multipleChoiceCount = 0;
                 for (int questionIndex = 0; questionIndex < topicCount; questionIndex++) {
                     if ((questionOffset + questionIndex) % 2 == 0) {
                         multipleChoiceCount++;
                     }
                 }
-            } else {
-                multipleChoiceCount = format.equals("multiple_choice") ? topicCount : 0;
             }
-            int subjectiveCount = topicCount - multipleChoiceCount;
-            generateForType(drafts, subjectName, topicName, context,
-                    "multiple_choice", multipleChoiceCount, count);
-            generateForType(drafts, subjectName, topicName, context,
-                    "subjective", subjectiveCount, count);
             questionOffset += topicCount;
-            if (drafts.size() > count) {
-                throw new IllegalStateException("The question generator returned more questions than requested.");
-            }
         }
+        if (format.equals("multiple_choice")) {
+            multipleChoiceCount = count;
+        }
+        int subjectiveCount = count - multipleChoiceCount;
+        generateForType(drafts, subjectName, topicNames, context,
+                "multiple_choice", multipleChoiceCount, count);
+        generateForType(drafts, subjectName, topicNames, context,
+                "subjective", subjectiveCount, count);
         if (drafts.size() != count) {
             throw new IllegalStateException("The question generator returned "
                     + drafts.size() + " of " + count + " requested questions.");
@@ -157,7 +156,7 @@ public class PaperQuestionGenerationService {
         return drafts;
     }
 
-    private void generateForType(List<Draft> drafts, String subjectName, String topicName,
+    private void generateForType(List<Draft> drafts, String subjectName, List<String> topicNames,
                                  String context, String questionType, int count, int totalCount) {
         int generatedCount = 0;
         while (generatedCount < count) {
@@ -166,7 +165,8 @@ public class PaperQuestionGenerationService {
             for (int attempt = 0; attempt < MAX_ATTEMPTS_PER_BATCH && batchGenerated < batchTarget; attempt++) {
                 int requested = batchTarget - batchGenerated;
                 var response = mlClient.generateQuestions(
-                        new MlGenerateRequest(subjectName, topicName, context, requested, questionType));
+                        new MlGenerateRequest(subjectName, String.join(", ", topicNames), context,
+                                requested, questionType, topicNames));
                 List<MlGeneratedQuestion> generated = response == null ? null : response.questions();
                 if (generated == null || generated.isEmpty()) {
                     continue;
@@ -179,7 +179,11 @@ public class PaperQuestionGenerationService {
                         continue;
                     }
                     validate(item, questionType);
-                    drafts.add(new Draft(topicName,
+                    String assignedTopic = resolveTopicName(item.topicName(), topicNames);
+                    if (assignedTopic == null) {
+                        continue;
+                    }
+                    drafts.add(new Draft(assignedTopic,
                             "Automatically inferred from uploaded past papers.", item));
                     batchGenerated++;
                     generatedCount++;
@@ -202,21 +206,40 @@ public class PaperQuestionGenerationService {
         return keywords.isEmpty() ? "Past-paper topic " + (index + 1) : String.join(", ", keywords);
     }
 
-    private String topicContext(MlCluster cluster) {
-        StringBuilder context = new StringBuilder("Related questions from uploaded past papers:\n");
-        List<MlQuestion> questions = cluster.questions() == null ? List.of() : cluster.questions();
-        for (MlQuestion question : questions.stream().limit(20).toList()) {
-            if (question == null || question.text() == null || question.text().isBlank()) {
-                continue;
-            }
-            String text = question.text().replace("</notes>", "");
-            String line = "- " + text.strip() + "\n";
-            if (context.length() + line.length() > MAX_CONTEXT_LENGTH) {
+    private String topicContext(List<MlCluster> clusters, List<String> topicNames) {
+        StringBuilder context = new StringBuilder(
+                "Use these topic-specific past-paper examples as source material:\n");
+        for (int i = 0; i < clusters.size(); i++) {
+            String heading = "\nTopic: " + topicNames.get(i) + "\n";
+            if (context.length() + heading.length() > MAX_CONTEXT_LENGTH) {
                 break;
             }
-            context.append(line);
+            context.append(heading);
+            List<MlQuestion> questions = clusters.get(i).questions() == null
+                    ? List.of() : clusters.get(i).questions();
+            for (MlQuestion question : questions.stream().limit(20).toList()) {
+                if (question == null || question.text() == null || question.text().isBlank()) {
+                    continue;
+                }
+                String text = question.text().replace("</notes>", "");
+                String line = "- " + text.strip() + "\n";
+                if (context.length() + line.length() > MAX_CONTEXT_LENGTH) {
+                    return context.toString();
+                }
+                context.append(line);
+            }
         }
         return context.toString();
+    }
+
+    private String resolveTopicName(String generatedTopic, List<String> topicNames) {
+        if (generatedTopic == null || generatedTopic.isBlank()) {
+            return topicNames.size() == 1 ? topicNames.get(0) : null;
+        }
+        return topicNames.stream()
+                .filter(topic -> topic.equalsIgnoreCase(generatedTopic.strip()))
+                .findFirst()
+                .orElse(null);
     }
 
     private void validate(MlGeneratedQuestion item, String questionType) {

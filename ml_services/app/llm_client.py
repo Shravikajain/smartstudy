@@ -57,6 +57,7 @@ QUESTION_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "prompt": {"type": "string"},
+                    "topic_name": {"type": "string"},
                     "question_type": {"type": "string",
                                       "enum": ["multiple_choice", "subjective"]},
                     "options": {"type": "array", "items": {"type": "string"},
@@ -66,7 +67,7 @@ QUESTION_SCHEMA = {
                     "explanation": {"type": "string"},
                     "difficulty": {"type": "integer", "minimum": 1, "maximum": 5},
                 },
-                "required": ["prompt", "question_type", "options", "correct_index",
+                "required": ["prompt", "topic_name", "question_type", "options", "correct_index",
                              "reference_answer", "explanation", "difficulty"],
             },
         }
@@ -90,11 +91,18 @@ def _build_prompt(req: GenerateRequest) -> str:
         if req.question_type == "multiple_choice"
         else "subjective, with no options, a model reference answer, and a concise marking rubric"
     )
+    topics = req.topic_names or [req.topic_name]
+    topic_guidance = (
+        f"Choose the most relevant topic for each question from this exact list: {', '.join(topics)}. "
+        "Return the chosen topic in the topic_name field and distribute questions across the topics."
+        if len(topics) > 1
+        else f"Set topic_name to exactly: {topics[0]}."
+    )
     parts = [
         f"Subject: {req.subject_name}",
-        f"Topic: {req.topic_name}",
+        f"Topics: {', '.join(topics)}",
         f"Write {req.count} {question_format} questions. Set question_type to "
-        f"'{req.question_type}' for every returned question.",
+        f"'{req.question_type}' for every returned question. {topic_guidance}",
     ]
     if req.context:
         safe = req.context.replace("</notes>", "")
@@ -140,6 +148,11 @@ def generate_questions(req: GenerateRequest) -> list[GeneratedQuestion]:
     for item in raw:
         try:
             question = GeneratedQuestion.model_validate(item)
+            if (not question.topic_name or
+                    question.topic_name.casefold() not in {
+                        topic.casefold() for topic in (req.topic_names or [req.topic_name])
+                    }):
+                continue
             if req.question_type == "multiple_choice":
                 if (question.question_type != "multiple_choice" or len(question.options) != 4
                         or question.correct_index is None or not 0 <= question.correct_index < 4):

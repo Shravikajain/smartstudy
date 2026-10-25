@@ -1,17 +1,21 @@
 package com.smartstudy.backend.controller;
 
+import java.io.IOException;
 import java.util.List;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.smartstudy.backend.dto.ml.MlInterviewTurnRequest;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnResponse;
-import com.smartstudy.backend.model.User;
+import com.smartstudy.backend.dto.ml.MlTranscriptionResponse;
 import com.smartstudy.backend.service.MlClient;
 import com.smartstudy.backend.service.UserService;
 
@@ -19,6 +23,7 @@ import com.smartstudy.backend.service.UserService;
 @RequestMapping("/api/interview")
 public class InterviewController {
 
+    private static final long MAX_AUDIO_BYTES = 10L * 1024 * 1024;
     private static final List<String> TARGET_TYPES = List.of("subject", "engineering_role");
     private static final List<String> LEVELS = List.of("beginner", "intermediate", "advanced");
 
@@ -67,5 +72,26 @@ public class InterviewController {
             throw new IllegalArgumentException("Provide an answer for the current interview question");
         }
         return ResponseEntity.ok(mlClient.interviewTurn(request));
+    }
+
+    @PostMapping(value = "/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<MlTranscriptionResponse> transcribeAudio(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(name = "language", required = false) String language,
+            Authentication authentication) {
+        userService.getCurrentUser(authentication);
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("Record an answer before requesting transcription");
+        }
+        if (file.getSize() > MAX_AUDIO_BYTES) {
+            throw new IllegalArgumentException("The audio recording is too large (10 MB maximum)");
+        }
+        try {
+            return ResponseEntity.ok(mlClient.transcribeAudio(
+                    file.getBytes(), file.getOriginalFilename() == null
+                            ? "interview-answer.webm" : file.getOriginalFilename(), language));
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Could not read the audio recording", exception);
+        }
     }
 }

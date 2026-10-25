@@ -57,4 +57,5 @@ public class QuestionPaper {
     public LocalDateTime getUploadedAt() { return uploadedAt; }
     public String getExtractedText() { return extractedText; }
     public Subject getSubject() { return subject; }
+    public void setExtractedText(String extractedText) { this.extractedText = extractedText; }
 }
