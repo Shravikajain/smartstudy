@@ -8,6 +8,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
+
+import com.smartstudy.backend.dto.ml.MlDetectResponse;
 
 @Entity
 @Table(name = "quiz_answers")
@@ -37,6 +40,21 @@ public class QuizAnswer {
     @Column(nullable = false)
     private double abilityAfter;
 
+    // Subjective answers keep the learner's text, the grade and the AI-writing estimate for review.
+    @Column(length = 12000)
+    private String answerText;
+
+    private Double score;
+
+    @Column(length = 4000)
+    private String feedback;
+
+    private Double aiProbability;
+
+    private Boolean aiFlagged;
+
+    private Instant answeredAt = Instant.now();
+
     protected QuizAnswer() {
     }
 
@@ -57,4 +75,21 @@ public class QuizAnswer {
     public boolean isCorrect() { return correct; }
     public double getAbilityBefore() { return abilityBefore; }
     public double getAbilityAfter() { return abilityAfter; }
+    public String getAnswerText() { return answerText; }
+    public Double getScore() { return score; }
+    public String getFeedback() { return feedback; }
+    public Double getAiProbability() { return aiProbability; }
+    public Boolean getAiFlagged() { return aiFlagged; }
+    public Instant getAnsweredAt() { return answeredAt; }
+
+    public void recordWrittenAnswer(String answerText, Double score, String feedback,
+                                    MlDetectResponse aiAssessment) {
+        this.answerText = answerText;
+        this.score = score;
+        this.feedback = feedback;
+        if (aiAssessment != null) {
+            this.aiProbability = aiAssessment.aiProbability();
+            this.aiFlagged = aiAssessment.isAiGenerated();
+        }
+    }
 }

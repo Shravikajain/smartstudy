@@ -3,11 +3,17 @@ import re
 from functools import lru_cache
 from typing import Callable
 
-from .schemas import DetectAiRequest, DetectAiResponse
+from .background import BackgroundLoader, transformers_import_lock
+from .schemas import DetectAiRequest, DetectAiResponse, PassageScore
 
-HF_MODEL = "Hello-SimpleAI/chatgpt-detector-roberta"
-HF_MODEL_REVISION = "d2b342c61775d5dd0221808a79983ed3b86ffd86"
+# Fakespot's 2025 RoBERTa detector (labels: Human / AI). It replaced Hello-SimpleAI's 2023
+# chatgpt-detector-roberta, which flagged none of 8 gpt-oss:120b answers in our evaluation.
+# On the same 8 AI / 8 human samples this model caught 3/8 AI texts and wrongly flagged 2/8 human
+# ones at the 0.6 threshold, so results stay advisory.
+HF_MODEL = "fakespot-ai/roberta-base-ai-text-detection-v1"
+HF_MODEL_REVISION = "f9cdb14d1f8b105f597d80fa7b56f20c6ea0e9db"
 MAX_SEQUENCE_LENGTH = 512
+PASSAGE_EXCERPT_CHARS = 280
 CHUNK_OVERLAP_TOKENS = 64
 
 
@@ -18,7 +24,8 @@ class AiModelUnavailableError(RuntimeError):
 @lru_cache(maxsize=1)
 def _get_classifier() -> Callable[..., list[dict[str, str | float]]]:
     try:
-        from transformers import pipeline
+        with transformers_import_lock:
+            from transformers import pipeline
 
         return pipeline(
             "text-classification",
@@ -84,7 +91,14 @@ def _chunk_probabilities(result: list[dict[str, str | float]]) -> tuple[float, f
     return ai_prob, human_prob
 
 
+classifier_loader = BackgroundLoader("AI detector", _get_classifier)
+
+
 def detect_ai(req: DetectAiRequest) -> DetectAiResponse:
+    if not classifier_loader.ready():
+        classifier_loader.start()
+        raise AiModelUnavailableError(
+            "The AI-writing detector is still loading. Try again in a few minutes.")
     burstiness = calculate_burstiness(req.text)
     classifier = _get_classifier()
     tokenizer = getattr(classifier, "tokenizer", None)
@@ -130,5 +144,17 @@ def detect_ai(req: DetectAiRequest) -> DetectAiResponse:
         ai_probability=round(ai_prob, 4),
         human_probability=round(human_prob, 4),
         burstiness_score=burstiness,
-        feedback=feedback
+        feedback=feedback,
+        # One score per classified window, so long documents show which sections drove the result.
+        passages=[
+            PassageScore(excerpt=_excerpt(chunk), ai_probability=round(probability[0], 4))
+            for chunk, probability in zip(chunks, probabilities)
+        ],
     )
+
+
+def _excerpt(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) <= PASSAGE_EXCERPT_CHARS:
+        return text
+    return text[:PASSAGE_EXCERPT_CHARS].rsplit(" ", 1)[0] + "…"

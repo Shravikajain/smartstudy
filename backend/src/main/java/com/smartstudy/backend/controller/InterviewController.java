@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.smartstudy.backend.dto.ml.MlInterviewMessage;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnRequest;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnResponse;
 import com.smartstudy.backend.dto.ml.MlTranscriptionResponse;
@@ -24,6 +25,7 @@ import com.smartstudy.backend.service.UserService;
 public class InterviewController {
 
     private static final long MAX_AUDIO_BYTES = 10L * 1024 * 1024;
+    private static final int MAX_HISTORY_CHARS = 24000;
     private static final List<String> TARGET_TYPES = List.of("subject", "engineering_role");
     private static final List<String> LEVELS = List.of("beginner", "intermediate", "advanced");
 
@@ -62,16 +64,31 @@ public class InterviewController {
                 || !List.of("interviewer", "candidate").contains(message.speaker()))) {
             throw new IllegalArgumentException("Interview history is invalid or too long");
         }
-        if (request.history().stream().mapToInt(message -> message.content().length()).sum() > 24000) {
-            throw new IllegalArgumentException("Interview history exceeds the 24,000-character limit");
-        }
         if (request.questionNumber() == 0 && request.answer() != null
                 || request.questionNumber() > 0 && (request.answer() == null
                 || request.answer().isBlank() || request.answer().length() < 10
                 || request.answer().length() > 12000)) {
             throw new IllegalArgumentException("Provide an answer for the current interview question");
         }
-        return ResponseEntity.ok(mlClient.interviewTurn(request));
+        List<MlInterviewMessage> history = recentHistory(request.history());
+        return ResponseEntity.ok(mlClient.interviewTurn(new MlInterviewTurnRequest(
+                request.targetType(), request.target(), request.level(), request.questionNumber(),
+                request.questionCount(), history, request.answer())));
+    }
+
+    // Long interviews would otherwise fail near the end: keep the most recent messages that fit
+    // the prompt budget, dropping whole interviewer/candidate pairs from the start.
+    static List<MlInterviewMessage> recentHistory(List<MlInterviewMessage> history) {
+        int start = 0;
+        int length = history.stream().mapToInt(message -> message.content().length()).sum();
+        while (length > MAX_HISTORY_CHARS && start < history.size()) {
+            int dropped = Math.min(2, history.size() - start);
+            for (int i = 0; i < dropped; i++) {
+                length -= history.get(start + i).content().length();
+            }
+            start += dropped;
+        }
+        return history.subList(start, history.size());
     }
 
     @PostMapping(value = "/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

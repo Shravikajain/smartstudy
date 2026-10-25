@@ -5,6 +5,7 @@ import com.smartstudy.backend.dto.StartQuizResponse;
 import com.smartstudy.backend.model.*;
 import com.smartstudy.backend.dto.ml.MlDetectResponse;
 import com.smartstudy.backend.dto.ml.MlGradeAnswerResponse;
+import com.smartstudy.backend.exception.MlServiceUnavailableException;
 import com.smartstudy.backend.service.MlClient;
 import com.smartstudy.backend.service.PdfTextExtractor;
 import com.smartstudy.backend.repository.QuestionRepository;
@@ -13,10 +14,12 @@ import com.smartstudy.backend.repository.QuizSessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
@@ -39,6 +42,7 @@ class QuizServiceTest {
     @Mock SubjectService subjectService;
     @Mock MlClient mlClient;
     @Mock PdfTextExtractor pdfTextExtractor;
+    @Mock PlatformTransactionManager transactionManager;
 
     @InjectMocks QuizService quizService;
 
@@ -190,6 +194,23 @@ class QuizServiceTest {
     }
 
     @Test
+    void subjectiveAnswerIsStillGradedWhenWritingDetectorIsUnavailable() {
+        Question q = new Question(null, "Explain the concept.", List.of(), 0,
+                "Rubric", 0.0, QuestionType.SUBJECTIVE, "Reference answer");
+        QuizSession session = sessionWith(q, 1);
+        when(sessionRepository.findById(100L)).thenReturn(Optional.of(session));
+        when(mlClient.detect(any())).thenThrow(
+                new MlServiceUnavailableException("ML service error: detector model unavailable"));
+        when(mlClient.gradeAnswer(any())).thenReturn(new MlGradeAnswerResponse(0.7, "Correct."));
+
+        AnswerResult result = quizService.answerSubjective(100L,
+                "This answer contains enough detail to be assessed against the expected response.", null, user);
+
+        assertThat(result.score()).isEqualTo(0.7);
+        assertThat(result.aiWritingAssessment()).isNull();
+    }
+
+    @Test
     void subjectiveAnswerRequiresEnoughTextForReliableAssessment() {
         Question q = new Question(null, "Explain the concept.", List.of(), 0,
                 "Rubric", 0.0, QuestionType.SUBJECTIVE, "Reference answer");
@@ -220,5 +241,79 @@ class QuizServiceTest {
 
         assertThat(result.score()).isEqualTo(0.7);
         verify(pdfTextExtractor).extractText(any(byte[].class));
+    }
+
+    private Question subjectiveQuestion(long id) {
+        Question q = new Question(null, "Explain concept " + id, List.of(), 0,
+                "Rubric", 0.0, QuestionType.SUBJECTIVE, "Reference answer");
+        ReflectionTestUtils.setField(q, "id", id);
+        return q;
+    }
+
+    @Test
+    void multipleChoiceAnswerStoresTheOptionTheLearnerPicked() {
+        Question q = question(1, 0.0, 2);
+        when(sessionRepository.findById(100L)).thenReturn(Optional.of(sessionWith(q, 1)));
+
+        quizService.answer(100L, 3, user);
+
+        ArgumentCaptor<QuizAnswer> saved = ArgumentCaptor.forClass(QuizAnswer.class);
+        verify(answerRepository).save(saved.capture());
+        assertThat(saved.getValue().getSelectedIndex()).isEqualTo(3);
+        assertThat(saved.getValue().isCorrect()).isFalse();
+    }
+
+    @Test
+    void subjectiveAnswerIsStoredWithGradeFeedbackAndAiEstimateForLaterReview() {
+        Question q = subjectiveQuestion(1);
+        when(sessionRepository.findById(100L)).thenReturn(Optional.of(sessionWith(q, 1)));
+        when(mlClient.detect(any())).thenReturn(new MlDetectResponse(true, 0.91, 0.09, 0.2, "Flagged."));
+        when(mlClient.gradeAnswer(any())).thenReturn(new MlGradeAnswerResponse(0.7, "Mostly right."));
+        String answer = "This answer explains the concept with enough detail to be assessed fairly.";
+
+        quizService.answerSubjective(100L, answer, null, user);
+
+        ArgumentCaptor<QuizAnswer> saved = ArgumentCaptor.forClass(QuizAnswer.class);
+        verify(answerRepository).save(saved.capture());
+        assertThat(saved.getValue().getAnswerText()).isEqualTo(answer);
+        assertThat(saved.getValue().getScore()).isEqualTo(0.7);
+        assertThat(saved.getValue().getFeedback()).isEqualTo("Mostly right.");
+        assertThat(saved.getValue().getAiProbability()).isEqualTo(0.91);
+        assertThat(saved.getValue().getAiFlagged()).isTrue();
+    }
+
+    @Test
+    void quizCanBeLimitedToSubjectiveQuestions() {
+        Question mcq = question(1, 0.0, 0);
+        Question written = subjectiveQuestion(2);
+        when(subjectService.getSubjectByIdForUser(10L, user)).thenReturn(subject);
+        when(questionRepository.findByTopicSubjectId(10L)).thenReturn(List.of(mcq, written));
+        when(sessionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        StartQuizResponse response = quizService.start(10L, 5, null, "subjective", user);
+
+        assertThat(response.question().id()).isEqualTo(2L);
+        assertThat(response.question().totalQuestions()).isEqualTo(1);
+        ArgumentCaptor<QuizSession> saved = ArgumentCaptor.forClass(QuizSession.class);
+        verify(sessionRepository).save(saved.capture());
+        assertThat(saved.getValue().getQuestionPool()).containsExactly(written);
+        assertThat(saved.getValue().getQuestionMode()).isEqualTo("subjective");
+    }
+
+    @Test
+    void choosingAQuestionTypeWithNoQuestionsExplainsWhatToDo() {
+        when(subjectService.getSubjectByIdForUser(10L, user)).thenReturn(subject);
+        when(questionRepository.findByTopicSubjectId(10L)).thenReturn(List.of(question(1, 0.0, 0)));
+
+        assertThatThrownBy(() -> quizService.start(10L, 5, null, "subjective", user))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("No subjective questions yet");
+    }
+
+    @Test
+    void unknownQuestionTypeIsRejected() {
+        assertThatThrownBy(() -> quizService.start(10L, 5, null, "essay", user))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("questionType");
     }
 }

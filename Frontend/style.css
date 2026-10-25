@@ -448,3 +448,89 @@ h3 { margin-bottom: 8px; font-size: 18px; font-weight: 750; line-height: 1.35; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* AI-writing estimate: shared by quiz feedback, test review and authenticity checks */
+.ai-badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 99px; font-size: 10px; font-weight: 800; }
+.ai-badge-high { background: var(--red-soft); color: var(--red); }
+.ai-badge-mid { background: #fff6e2; color: #8a6412; }
+.ai-badge-low { background: var(--green-soft); color: #2f7a52; }
+.ai-writing-result.ai-high { border-color: #f0cfc8; background: #fffaf8; }
+.ai-writing-result.ai-mid { border-color: #efe0bb; background: #fffdf7; }
+.ai-high .probability-track span, .passage-row.ai-high .probability-track span { background: #c8624f; }
+.ai-mid .probability-track span, .passage-row.ai-mid .probability-track span { background: #d39b2c; }
+.passage-row .probability-track span { display: block; height: 100%; border-radius: inherit; background: #54a28a; }
+.ai-unavailable { display: flex; gap: 8px; align-items: center; margin-top: 10px; padding: 12px 14px; border: 1px dashed #d4ddda; border-radius: 11px; color: var(--muted-dark); font-size: 11px; line-height: 1.6; }
+
+.summary-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+
+/* Question-bank practice */
+.practice-panel { margin-top: 16px; padding: 25px; }
+.practice-panel > .muted { margin: 0 0 15px; }
+.practice-form { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
+.practice-form .count-input-control { width: 110px; }
+
+/* My tests */
+.test-list { display: grid; gap: 10px; margin-top: 26px; }
+.test-row { display: flex; gap: 14px; align-items: center; padding: 15px 16px; border: 1px solid var(--line); border-radius: 13px; background: white; transition: border .16s, box-shadow .16s; }
+.test-row:hover { border-color: #a9c9c2; box-shadow: var(--shadow); }
+.test-score { display: grid; width: 54px; height: 54px; flex: 0 0 auto; place-items: center; border-radius: 14px; background: var(--teal-soft); color: var(--teal-dark); font-size: 14px; font-weight: 800; }
+.test-copy { display: grid; gap: 4px; min-width: 0; }
+.test-copy strong { font-size: 14px; }
+.test-copy small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.test-tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-left: auto; }
+.tag { display: inline-flex; padding: 4px 9px; border-radius: 99px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.tag-good { background: var(--green-soft); color: #2f7a52; }
+.tag-bad { background: var(--red-soft); color: var(--red); }
+.tag-warn { background: #fff6e2; color: #8a6412; }
+.tag-muted { background: #eef2f1; color: var(--muted-dark); }
+
+.review-stats { margin-bottom: 26px; }
+.review-list { display: grid; gap: 14px; }
+.review-card { padding: 22px; border: 1px solid var(--line); border-radius: 15px; background: white; }
+.review-heading { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+.review-heading h3 { margin: 4px 0 14px; font-size: 17px; line-height: 1.5; }
+.review-block { margin-top: 12px; }
+.review-block .eyebrow { margin-bottom: 5px; }
+.review-block p, .review-details p { margin: 0; color: var(--muted-dark); font-size: 12px; line-height: 1.7; }
+.written-answer { padding: 12px 14px; border-radius: 10px; background: #f7faf9; color: var(--ink) !important; white-space: pre-wrap; }
+.review-options { display: grid; gap: 6px; margin: 0; padding-left: 22px; color: var(--muted-dark); font-size: 12px; line-height: 1.6; }
+.review-options li { padding: 4px 8px; border-radius: 8px; }
+.review-options .option-correct { background: var(--green-soft); color: #22603f; font-weight: 700; }
+.review-options .option-wrong { background: var(--red-soft); color: var(--red); }
+.option-note { font-size: 10px; font-weight: 600; }
+.review-details { margin-top: 12px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.review-details summary { color: var(--teal-dark); font-size: 12px; font-weight: 700; cursor: pointer; }
+.review-details p { margin-top: 9px; }
+
+/* Authenticity check */
+.authenticity-panel { margin-top: 18px; padding: 25px; }
+.authenticity-form { display: grid; gap: 12px; }
+.authenticity-form > label:first-child { color: var(--muted-dark); font-size: 11px; font-weight: 800; }
+.authenticity-form textarea { width: 100%; min-height: 190px; resize: vertical; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: #fcfdfd; color: var(--ink); font-size: 12px; line-height: 1.7; }
+.authenticity-form .button { justify-self: start; }
+.detector-disclaimer { display: flex; gap: 8px; align-items: flex-start; margin: 16px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.authenticity-result { margin-top: 16px; padding: 25px; }
+.authenticity-result > .muted { margin: 0 0 4px; }
+.passage-list { display: grid; gap: 10px; margin-top: 18px; }
+.passage-row { padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; }
+.passage-row .probability-track { margin-bottom: 8px; }
+.passage-row p { margin: 0; color: var(--muted-dark); font-size: 11px; line-height: 1.6; }
+.paper-row .ai-badge { margin-left: auto; white-space: nowrap; }
+
+@media (max-width: 1000px) {
+  .nav-links { margin-left: 24px; }
+  .nav-links a { gap: 0; padding: 9px; font-size: 0; }
+  .nav-links a .icon { width: 18px; height: 18px; }
+}
+
+@media (max-width: 600px) {
+  .practice-panel, .authenticity-panel, .authenticity-result { padding: 18px 15px; }
+  .test-row { flex-wrap: wrap; }
+  .test-tags { justify-content: flex-start; margin-left: 68px; }
+  .test-row .subject-arrow { display: none; }
+  .review-card { padding: 16px 13px; }
+  .review-heading { flex-direction: column; gap: 0; }
+  .review-heading h3 { margin-bottom: 8px; font-size: 15px; }
+  .paper-row { flex-wrap: wrap; }
+  .paper-row .ai-badge { margin-left: 0; }
+}

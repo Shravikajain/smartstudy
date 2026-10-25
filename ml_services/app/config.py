@@ -11,3 +11,7 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", _ENV.get("OLLAMA_MODEL", "gpt-oss:120b"
 OLLAMA_THINK = os.getenv("OLLAMA_THINK", _ENV.get("OLLAMA_THINK"))
 ML_INTERNAL_KEY = os.getenv("ML_INTERNAL_KEY", _ENV.get("ML_INTERNAL_KEY"))
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", _ENV.get("WHISPER_MODEL", "base"))
+# Cluster past-paper questions by meaning as well as shared words ("false" for TF-IDF only).
+ML_EMBEDDINGS = os.getenv("ML_EMBEDDINGS", _ENV.get("ML_EMBEDDINGS", "true")).lower() not in ("false", "0", "off")
+# Load the AI detector and Whisper models in the background at startup ("false" to disable).
+ML_WARMUP = os.getenv("ML_WARMUP", _ENV.get("ML_WARMUP", "true")).lower() not in ("false", "0", "off")

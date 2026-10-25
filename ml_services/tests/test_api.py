@@ -1,6 +1,7 @@
 import sys
 from types import ModuleType
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import ai_detector, main
@@ -10,7 +11,14 @@ from app.schemas import GeneratedQuestion, GradeAnswerResponse, InterviewTurnRes
 from app.pdf_ocr import PdfOcrError
 from app.transcription import TranscriptionError
 
-client = TestClient(main.app)
+INTERNAL_KEY = "test-ocr-key"
+client = TestClient(main.app, headers={"X-Internal-Key": INTERNAL_KEY})
+unauthenticated = TestClient(main.app)
+
+
+@pytest.fixture(autouse=True)
+def internal_key(monkeypatch):
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", INTERNAL_KEY)
 
 PAPER_1 = (
     "1. Explain the N-Queens problem using backtracking technique.\n"
@@ -25,12 +33,25 @@ PAPER_2 = (
 
 
 def test_health():
-    assert client.get("/health").json() == {"status": "ok"}
+    assert unauthenticated.get("/health").json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize("path", [
+    "/analyze", "/generate-questions", "/detect-ai", "/grade-answer", "/interview/turn",
+])
+def test_json_endpoints_require_internal_service_key(path):
+    assert unauthenticated.post(path, json={}).status_code == 403
+    assert unauthenticated.post(path, json={}, headers={"X-Internal-Key": "wrong"}).status_code == 403
+
+
+def test_endpoints_are_disabled_when_internal_key_is_not_configured(monkeypatch):
+    monkeypatch.setattr(main, "ML_INTERNAL_KEY", None)
+    assert client.post("/analyze", json={}).status_code == 503
 
 
 def test_scanned_pdf_ocr_requires_internal_service_key(monkeypatch):
     monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
-    response = client.post(
+    response = unauthenticated.post(
         "/extract-pdf-text",
         files={"file": ("scan.pdf", b"%PDF-test", "application/pdf")},
     )
@@ -71,7 +92,7 @@ def test_scanned_pdf_ocr_reports_unreadable_document(monkeypatch):
 
 def test_interview_audio_transcription_requires_internal_key(monkeypatch):
     monkeypatch.setattr(main, "ML_INTERNAL_KEY", "test-ocr-key")
-    response = client.post(
+    response = unauthenticated.post(
         "/transcribe-audio",
         files={"file": ("answer.webm", b"audio", "audio/webm")},
     )
@@ -328,6 +349,8 @@ def test_detect_ai_classifies_overlapping_chunks_and_averages_scores(monkeypatch
     assert data["isAiGenerated"] is True
     assert data["aiProbability"] == 0.4667
     assert data["humanProbability"] == 0.5333
+    assert [p["aiProbability"] for p in data["passages"]] == [0.2, 0.8, 0.4]
+    assert data["passages"][1]["excerpt"].startswith("token6 token7")
     assert classifier.calls == [
         (
             [
@@ -382,3 +405,7 @@ def test_detect_ai_returns_service_unavailable_when_local_model_cannot_load(monk
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Local model unavailable"
+
+def test_detect_ai_rejects_text_over_the_size_limit():
+    response = client.post("/detect-ai", json={"text": "word " * 12001})
+    assert response.status_code == 422

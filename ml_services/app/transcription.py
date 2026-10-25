@@ -6,6 +6,7 @@ from av.error import FFmpegError
 from faster_whisper import WhisperModel
 from huggingface_hub.errors import HfHubHTTPError
 
+from .background import BackgroundLoader
 from .config import WHISPER_MODEL
 
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
@@ -25,7 +26,14 @@ def _load_model() -> WhisperModel:
         ) from error
 
 
+model_loader = BackgroundLoader("Whisper", _load_model)
+
+
 def transcribe_audio(audio_bytes: bytes, language: str | None = None) -> tuple[str, str]:
+    if not model_loader.ready():
+        model_loader.start()
+        raise TranscriptionError(
+            "The speech model is still loading. Type your answer or try recording again in a few minutes.")
     if not audio_bytes:
         raise TranscriptionError("The audio recording is empty.")
     if len(audio_bytes) > MAX_AUDIO_BYTES:

@@ -6,8 +6,11 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir -r requirements.txt
+# The pip cache mount keeps downloaded wheels (torch is large) between builds, so a retry
+# after a network timeout does not start from scratch.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --retries 10 --timeout 120 torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --retries 10 --timeout 120 -r requirements.txt
 COPY app ./app
 
 EXPOSE 8000

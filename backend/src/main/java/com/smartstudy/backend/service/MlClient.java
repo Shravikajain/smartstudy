@@ -1,5 +1,8 @@
 package com.smartstudy.backend.service;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
@@ -105,13 +108,25 @@ public class MlClient {
                     .retrieve()
                     .body(responseType);
         } catch (HttpClientErrorException e) {                 // 4xx: we sent something invalid
-            throw new IllegalArgumentException("ML request rejected: " + e.getResponseBodyAsString());
+            throw new IllegalArgumentException(detail(e.getResponseBodyAsString(), "The ML service rejected the request"));
         } catch (HttpServerErrorException e) {                 // 5xx: the ML service or the LLM failed
-            throw new MlServiceUnavailableException("ML service error: " + e.getResponseBodyAsString());
+            throw new MlServiceUnavailableException(detail(e.getResponseBodyAsString(), "The ML service failed"));
         } catch (ResourceAccessException e) {                  // connection refused or timeout
             throw new MlServiceUnavailableException("The ML service is not reachable right now");
         } catch (RestClientException e) {                      // e.g. the response JSON didn't parse
             throw new IllegalStateException("Unexpected response from the ML service: " + e.getMessage(), e);
         }
+    }
+
+    // FastAPI errors look like {"detail":"..."}; show users that message rather than raw JSON.
+    // Validation errors carry a list in "detail", so they fall back to the generic message.
+    private static final Pattern DETAIL = Pattern.compile("\"detail\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+
+    static String detail(String body, String fallback) {
+        Matcher matcher = DETAIL.matcher(body == null ? "" : body);
+        if (!matcher.find()) {
+            return fallback;
+        }
+        return matcher.group(1).replace("\\\"", "\"").replace("\\\\", "\\");
     }
 }

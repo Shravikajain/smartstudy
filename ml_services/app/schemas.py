@@ -74,7 +74,8 @@ class GenerateResponse(CamelModel):
 
 
 class DetectAiRequest(CamelModel):
-    text: str = Field(min_length=50, description="Student notes or essay submission")
+    text: str = Field(min_length=50, max_length=60000,
+                      description="Student notes or essay submission")
     threshold: float = Field(default=0.60, ge=0.0, le=1.0)
 
 
@@ -112,9 +113,15 @@ class InterviewTurnResponse(CamelModel):
     complete: bool
 
 
+class PassageScore(CamelModel):
+    excerpt: str
+    ai_probability: float
+
+
 class DetectAiResponse(CamelModel):
     is_ai_generated: bool
     ai_probability: float
     human_probability: float
     burstiness_score: float
     feedback: str
+    passages: list[PassageScore] = Field(default_factory=list)

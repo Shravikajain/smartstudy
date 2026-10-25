@@ -28,6 +28,8 @@
       microphone: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/>',
       back: '<path d="m15 18-6-6 6-6"/>',
       close: '<path d="m18 6-12 12M6 6l12 12"/>',
+      history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+      scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 9h8M8 12h8M8 15h5"/>',
     };
     return `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || ""}</svg>`;
@@ -38,6 +40,35 @@
     message.className = text ? `notice ${kind}` : "notice";
     message.textContent = text;
     message.hidden = !text;
+  }
+
+  const QUESTION_MODES = { multiple_choice: "Multiple choice", subjective: "Subjective", mixed: "Both" };
+
+  function formatDate(value) {
+    return value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+      : "Date not recorded";
+  }
+
+  const percent = (value) => `${Math.round(value * 100)}%`;
+
+  // One wording for AI-writing estimates across quiz feedback, test reviews and authenticity checks.
+  // 60% matches the threshold the detector uses to flag text.
+  function aiBand(probability) {
+    if (probability >= 0.6) return { tone: "high", label: "Likely AI-written" };
+    if (probability >= 0.35) return { tone: "mid", label: "Uncertain: mixed signals" };
+    return { tone: "low", label: "Likely human-written" };
+  }
+
+  function aiMeter(probability, { title = "AI-WRITING CHECK", feedback = "", note = "" } = {}) {
+    const band = aiBand(probability);
+    return `<div class="ai-writing-result ai-${band.tone}">
+      <span class="eyebrow">${title}</span>
+      <div class="probability-row"><span class="ai-badge ai-badge-${band.tone}">${band.label}</span>
+        <strong>${percent(probability)} AI probability</strong></div>
+      <div class="probability-track"><span style="width:${percent(probability)}"></span></div>
+      ${feedback ? `<p>${esc(feedback)}</p>` : ""}
+      ${note ? `<small>${esc(note)}</small>` : ""}
+    </div>`;
   }
 
   async function api(path, { method = "GET", body, form, auth = true } = {}) {
@@ -91,8 +122,10 @@
         <span>smart<span class="brand-light">study</span></span>
       </a>
       <div class="nav-links">
-        <a class="${active === "subjects" ? "active" : ""}" href="#/subjects">${icon("grid")} My subjects</a>
-        <a class="${active === "interview" ? "active" : ""}" href="#/interview">${icon("sparkle")} AI Interview</a>
+        <a class="${active === "subjects" ? "active" : ""}" href="#/subjects" title="My subjects">${icon("grid")} My subjects</a>
+        <a class="${active === "tests" ? "active" : ""}" href="#/tests" title="My tests">${icon("history")} My tests</a>
+        <a class="${active === "authenticity" ? "active" : ""}" href="#/authenticity" title="Authenticity check">${icon("scan")} Authenticity check</a>
+        <a class="${active === "interview" ? "active" : ""}" href="#/interview" title="AI Interview">${icon("sparkle")} AI Interview</a>
       </div>
       <button class="nav-profile" data-action="logout" aria-label="Log out" title="Log out">
         <span class="avatar">S</span><span class="profile-label">Sign out</span>
@@ -321,8 +354,8 @@
 
   async function renderSubject(id) {
     renderNav("subjects");
-    const [subject, papers] = await Promise.all([
-      api(`/subjects/${id}`), api(`/subjects/${id}/papers`),
+    const [subject, papers, bank] = await Promise.all([
+      api(`/subjects/${id}`), api(`/subjects/${id}/papers`), api(`/subjects/${id}/question-bank`),
     ]);
     state.generated = null;
     state.quiz = null;
@@ -364,7 +397,7 @@
                 <select id="question-format" name="format">
                   <option value="multiple_choice">Multiple choice</option>
                   <option value="subjective">Subjective</option>
-                  <option value="mixed">Mixed</option>
+                  <option value="mixed">Both (MCQ + subjective)</option>
                 </select>
               </label>
               <button class="button button-primary generate-button" data-busy="Preparing your study set…">
@@ -388,6 +421,7 @@
           <p class="side-note">Scanned pages are read with OCR. Clear, upright scans work best. Review your questions before starting a quiz.</p>
         </aside>
       </section>
+      ${practicePanel(id, bank)}
       <section id="generated-section" class="generated-section" hidden></section>
       <section id="quiz-section" class="quiz-section" hidden></section>
       <section class="papers-section">
@@ -400,6 +434,30 @@
             <span class="paper-date">${paper.examYear ? esc(paper.examYear) : "Past paper"}</span></div>`).join("")
           || `<p class="empty-papers">Your uploaded papers will show here.</p>`}</div>
       </section>`;
+  }
+
+  function practicePanel(subjectId, bank) {
+    const total = bank.multipleChoice + bank.subjective;
+    if (!total) return "";
+    const counts = { multiple_choice: bank.multipleChoice, subjective: bank.subjective,
+      mixed: bank.multipleChoice && bank.subjective ? total : 0 };
+    const preferred = counts.mixed ? "mixed" : counts.subjective ? "subjective" : "multiple_choice";
+    const options = Object.entries(counts).map(([value, count]) => `
+      <option value="${value}" ${count ? "" : "disabled"} ${value === preferred ? "selected" : ""}>
+        ${QUESTION_MODES[value]} (${count})</option>`).join("");
+    return `<section class="panel practice-panel">
+      <div class="panel-heading"><span class="panel-icon">${icon("chart")}</span>
+        <div><span class="eyebrow">PRACTICE ANYTIME</span><h2>Take a test from your question bank</h2></div></div>
+      <p class="muted">${bank.multipleChoice} multiple-choice and ${bank.subjective} subjective questions are saved
+        for this subject. Choose what to practise; every test is saved in My tests for later review.</p>
+      <form data-form="practiceBank" data-subject="${subjectId}" class="practice-form">
+        <label class="format-input">Question type<select name="questionType">${options}</select></label>
+        <label class="count-input"><span>Questions</span>
+          <span class="count-input-control"><input type="number" name="count" min="1"
+            max="${Math.min(50, total)}" value="${Math.min(10, total)}" required></span></label>
+        <button class="button button-primary" data-busy="Starting your test…">Start test ${icon("arrow")}</button>
+      </form>
+    </section>`;
   }
 
   function showGenerated(result) {
@@ -488,14 +546,11 @@
             : `The correct answer is <b>${String.fromCharCode(65 + result.correctIndex)}</b>.
               ${esc(result.explanation || "Keep going—your next question will adapt to your progress.")}`}</p></div>
       </div>
-      ${aiAssessment ? `<div class="ai-writing-result">
-        <span class="eyebrow">AI-WRITING STYLE ESTIMATE</span>
-        <div class="probability-row"><span>Potential AI-style likelihood</span>
-          <strong>${Math.round(aiAssessment.aiProbability * 100)}%</strong></div>
-        <div class="probability-track"><span style="width:${Math.round(aiAssessment.aiProbability * 100)}%"></span></div>
-        <p>${esc(aiAssessment.feedback)}</p>
-        <small>This estimate is not proof of authorship and does not affect your answer grade or quiz difficulty.</small>
-      </div>` : ""}
+      ${aiAssessment ? aiMeter(aiAssessment.aiProbability, {
+        feedback: aiAssessment.feedback,
+        note: "This estimate is not proof of authorship and does not affect your answer grade or quiz difficulty.",
+      }) : subjective ? `<p class="ai-unavailable">${icon("scan")} The AI-writing check was unavailable for this answer,
+        so only the grade was recorded. Try again in a few minutes if the service is still starting.</p>` : ""}
       <div class="quiz-result-footer"><div><span class="eyebrow">YOUR PROGRESS</span>
         <strong>${result.correctCount} <small>correct</small> / ${result.answeredCount} <small>answered</small></strong>
         <span class="ability-label">Ability estimate ${result.abilityEstimate.toFixed(2)}</span></div>
@@ -518,10 +573,162 @@
           <strong>${summary.correctCount}</strong> right.</p>
         <div class="summary-score"><strong>${Math.round(summary.correctCount / summary.answeredCount * 100)}%</strong>
           <span>correct answers</span></div>
-        <p class="muted">Your adaptive practice set is ready whenever you want another round.</p>
-        <button class="button button-primary" data-action="backToQuestions">${icon("back")} Back to subject</button>
+        <p class="muted">This test is saved in My tests, with your answers, grades and feedback.</p>
+        <div class="summary-actions">
+          <a class="button button-primary" href="#/tests/${state.quiz.sessionId}">${icon("history")} Review your answers</a>
+          <button class="button button-secondary" data-action="backToQuestions">${icon("back")} Back to subject</button>
+        </div>
       </div>`;
     $("quiz-section").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function testScore(test) {
+    const parts = [`${test.correctCount}/${test.answeredCount} correct`];
+    if (test.averageWrittenScore != null) parts.push(`written answers ${percent(test.averageWrittenScore)}`);
+    return parts.join(" · ");
+  }
+
+  async function renderTests() {
+    renderNav("tests");
+    const tests = await api("/quizzes");
+    $("view").innerHTML = `
+      <section class="subject-hero"><div><span class="eyebrow">SELF-EVALUATION</span>
+        <h1>My tests</h1>
+        <p class="lead">Every test you take is saved here with your answers, grades and feedback, so you can see what to revise.</p>
+      </div><div class="subject-hero-mark">${icon("history")}</div></section>
+      <section class="test-list">${tests.map((test) => `
+        <a class="test-row" href="#/tests/${test.sessionId}">
+          <span class="test-score">${test.answeredCount ? percent(test.correctCount / test.answeredCount) : "–"}</span>
+          <span class="test-copy"><strong>${esc(test.subjectName)}</strong>
+            <small>${formatDate(test.startedAt)} · ${esc(QUESTION_MODES[test.questionMode] || "Practice")}
+              · ${esc(testScore(test))}</small></span>
+          <span class="test-tags">
+            ${test.status === "COMPLETED" ? "" : `<span class="tag tag-muted">Not finished</span>`}
+            ${test.aiFlaggedCount ? `<span class="tag tag-warn">${test.aiFlaggedCount} flagged as likely AI-written</span>` : ""}
+          </span>
+          <span class="subject-arrow">${icon("arrow")}</span>
+        </a>`).join("") || `<div class="empty-card"><span class="empty-icon">${icon("history")}</span>
+          <h3>No tests yet</h3><p>Open a subject and start a test. It will appear here when you answer your first question.</p></div>`}
+      </section>`;
+  }
+
+  function reviewAnswer(answer) {
+    const subjective = answer.questionType === "SUBJECTIVE";
+    const result = subjective
+      ? `<span class="tag ${answer.correct ? "tag-good" : "tag-warn"}">Score ${answer.score != null ? percent(answer.score) : "–"}</span>`
+      : `<span class="tag ${answer.correct ? "tag-good" : "tag-bad"}">${answer.correct ? "Correct" : "Incorrect"}</span>`;
+    const body = subjective ? `
+      <div class="review-block"><span class="eyebrow">YOUR ANSWER</span>
+        <p class="written-answer">${esc(answer.answerText || "No answer text was saved for this older test.")}</p></div>
+      ${answer.feedback ? `<div class="review-block"><span class="eyebrow">FEEDBACK</span><p>${esc(answer.feedback)}</p></div>` : ""}
+      ${answer.aiProbability != null ? aiMeter(answer.aiProbability)
+        : `<p class="ai-unavailable">${icon("scan")} No AI-writing check was recorded for this answer.</p>`}
+      <details class="review-details"><summary>Model answer and marking guide</summary>
+        ${answer.referenceAnswer ? `<p><strong>Model answer.</strong> ${esc(answer.referenceAnswer)}</p>` : ""}
+        ${answer.explanation ? `<p><strong>Marking guide.</strong> ${esc(answer.explanation)}</p>` : ""}
+      </details>` : `
+      <ol class="review-options" type="A">${answer.options.map((option, index) => {
+        const mark = index === answer.correctIndex ? "option-correct"
+          : index === answer.selectedIndex ? "option-wrong" : "";
+        const note = index === answer.correctIndex ? " (correct answer)"
+          : index === answer.selectedIndex ? " (your answer)" : "";
+        return `<li class="${mark}">${esc(option)}<span class="option-note">${note}</span></li>`;
+      }).join("")}</ol>
+      ${answer.explanation ? `<div class="review-block"><span class="eyebrow">EXPLANATION</span><p>${esc(answer.explanation)}</p></div>` : ""}`;
+    return `<article class="review-card">
+      <div class="question-meta"><span>Question ${String(answer.number).padStart(2, "0")} · ${esc(answer.topic)}</span>
+        <span>${subjective ? "Subjective" : "Multiple choice"}</span></div>
+      <div class="review-heading"><h3>${esc(answer.prompt)}</h3>${result}</div>
+      ${body}
+    </article>`;
+  }
+
+  async function renderTestReview(id) {
+    renderNav("tests");
+    const { summary, answers } = await api(`/quizzes/${id}`);
+    const written = answers.filter((answer) => answer.questionType === "SUBJECTIVE");
+    $("view").innerHTML = `
+      <a class="back-link" href="#/tests">${icon("back")} All tests</a>
+      <section class="subject-hero"><div><span class="eyebrow">TEST REVIEW</span>
+        <h1>${esc(summary.subjectName)}</h1>
+        <p class="lead">${formatDate(summary.startedAt)} · ${esc(QUESTION_MODES[summary.questionMode] || "Practice")}
+          ${summary.status === "COMPLETED" ? "" : " · Not finished"}</p>
+      </div><div class="subject-hero-mark">${icon("chart")}</div></section>
+      <section class="dashboard-stats review-stats">
+        <div class="stat-card"><span class="stat-icon stat-green">${icon("check")}</span>
+          <span><strong>${summary.correctCount} / ${summary.answeredCount}</strong><small>answers correct</small></span></div>
+        <div class="stat-card"><span class="stat-icon stat-violet">${icon("book")}</span>
+          <span><strong>${summary.averageWrittenScore != null ? percent(summary.averageWrittenScore) : "–"}</strong>
+            <small>average written score (${written.length} answers)</small></span></div>
+        <div class="stat-card"><span class="stat-icon stat-blue">${icon("scan")}</span>
+          <span><strong>${summary.aiFlaggedCount}</strong><small>answers flagged as likely AI-written</small></span></div>
+      </section>
+      <section class="review-list">${answers.map(reviewAnswer).join("")}</section>`;
+  }
+
+  function authenticityResult(result) {
+    const flaggedPassages = result.passages.length > 1 ? `
+      <div class="passage-list"><span class="eyebrow">SECTION BY SECTION</span>
+        ${result.passages.map((passage, index) => {
+          const band = aiBand(passage.aiProbability);
+          return `<div class="passage-row ai-${band.tone}">
+            <div class="probability-row"><span>Section ${index + 1} · <span class="ai-badge ai-badge-${band.tone}">${band.label}</span></span>
+              <strong>${percent(passage.aiProbability)}</strong></div>
+            <div class="probability-track"><span style="width:${percent(passage.aiProbability)}"></span></div>
+            <p>${esc(passage.excerpt)}</p></div>`;
+        }).join("")}</div>` : "";
+    return `<section class="panel authenticity-result">
+      <div class="panel-heading"><span class="panel-icon">${icon("scan")}</span>
+        <div><span class="eyebrow">RESULT</span><h2>${esc(result.sourceName)}</h2></div></div>
+      <p class="muted">${result.characterCount.toLocaleString()} characters checked
+        ${result.passageCount > 1 ? ` in ${result.passageCount} sections, ${result.flaggedPassageCount} flagged` : ""}.</p>
+      ${aiMeter(result.aiProbability, { title: "OVERALL ESTIMATE", feedback: result.feedback })}
+      ${flaggedPassages}
+    </section>`;
+  }
+
+  function recentChecks(checks) {
+    if (!checks.length) return `<p class="empty-papers">Your checks will be listed here.</p>`;
+    return checks.map((check) => {
+      const band = aiBand(check.aiProbability);
+      return `<div class="paper-row"><span class="paper-icon">${icon("scan")}</span>
+        <span class="paper-name"><strong>${esc(check.sourceName)}</strong>
+          <small>${formatDate(check.createdAt)} · ${check.characterCount.toLocaleString()} characters
+            ${check.passageCount > 1 ? ` · ${check.flaggedPassageCount}/${check.passageCount} sections flagged` : ""}</small></span>
+        <span class="ai-badge ai-badge-${band.tone}">${band.label} · ${percent(check.aiProbability)}</span></div>`;
+    }).join("");
+  }
+
+  async function renderAuthenticity() {
+    renderNav("authenticity");
+    const checks = await api("/authenticity/checks");
+    $("view").innerHTML = `
+      <section class="subject-hero"><div><span class="eyebrow">CONTENT AUTHENTICITY</span>
+        <h1>Check your material</h1>
+        <p class="lead">Upload notes, an essay or an assignment to estimate how likely it is that parts were written by AI.</p>
+      </div><div class="subject-hero-mark">${icon("scan")}</div></section>
+      <section class="panel authenticity-panel">
+        <form data-form="authenticity" class="authenticity-form">
+          <label for="authenticity-text">Paste your text</label>
+          <textarea id="authenticity-text" name="text" rows="9" maxlength="60000"
+            placeholder="Paste at least 50 characters…"></textarea>
+          <label class="answer-upload" for="authenticity-file">
+            <span>Or upload a PDF, .txt or .md file (one or the other, not both)</span>
+            <input id="authenticity-file" type="file" name="file" accept="application/pdf,.pdf,.txt,.md,text/plain,text/markdown">
+          </label>
+          <p class="answer-input-note">Up to 60,000 characters per check. Your text is analysed by the local Smart Study
+            detector and is not stored; only the result is saved to your history.</p>
+          <button class="button button-primary" data-busy="Checking your material…">${icon("scan")} Check authenticity</button>
+        </form>
+        <p class="detector-disclaimer">${icon("shield")} AI detection is an estimate and can be wrong in both directions,
+          especially for short, edited or non-native-English text. Use it to reflect on your work, never as proof.</p>
+      </section>
+      <div id="authenticity-result"></div>
+      <section class="papers-section">
+        <div class="section-heading"><div><span class="eyebrow">YOUR HISTORY</span><h2>Recent checks</h2></div>
+          <span class="count-pill" id="checks-count">${checks.length} ${checks.length === 1 ? "check" : "checks"}</span></div>
+        <div class="paper-list" id="recent-checks">${recentChecks(checks)}</div>
+      </section>`;
   }
 
   const forms = {
@@ -620,6 +827,34 @@
       await renderSubject(subjectId);
       showGenerated(result);
       showMsg("Your new questions are ready. Review them, then start adaptive practice.", "success");
+    },
+    async authenticity(form) {
+      const text = form.elements.text.value.trim();
+      const file = form.elements.file.files[0];
+      if (Boolean(text) === Boolean(file)) throw new Error("Paste your text or choose one file, not both.");
+      if (text && text.length < 50) throw new Error("Paste at least 50 characters to check.");
+      const data = new FormData();
+      if (text) data.append("text", text);
+      if (file) data.append("file", file);
+      const result = await api("/authenticity/check", { method: "POST", form: data });
+      $("authenticity-result").innerHTML = authenticityResult(result);
+      $("authenticity-result").scrollIntoView({ behavior: "smooth", block: "start" });
+      form.reset();
+      const checks = await api("/authenticity/checks");
+      $("recent-checks").innerHTML = recentChecks(checks);
+      $("checks-count").textContent = `${checks.length} ${checks.length === 1 ? "check" : "checks"}`;
+    },
+    async practiceBank(form) {
+      const data = new FormData(form);
+      const count = Number(data.get("count"));
+      if (!Number.isInteger(count) || count < 1 || count > 50) {
+        throw new Error("Choose between 1 and 50 questions.");
+      }
+      const response = await api(`/subjects/${form.dataset.subject}/quiz`, {
+        method: "POST", body: { maxQuestions: count, questionType: data.get("questionType") },
+      });
+      state.quiz = { sessionId: response.sessionId, correctCount: 0 };
+      renderQuestion(response.question);
     },
     async subjectiveAnswer(form) {
       const answerText = form.elements.answerText.value.trim();
@@ -893,6 +1128,9 @@
       if (hash === "#/login") renderAuth();
       else if (hash === "#/subjects") await renderSubjects();
       else if (hash === "#/interview") await renderInterviewSetup();
+      else if (hash === "#/tests") await renderTests();
+      else if (/^#\/tests\/\d+$/.test(hash)) await renderTestReview(hash.match(/\d+/)[0]);
+      else if (hash === "#/authenticity") await renderAuthenticity();
       else if (/^#\/subjects\/\d+$/.test(hash)) await renderSubject(hash.match(/\d+/)[0]);
       else location.hash = "#/subjects";
     } catch (error) {

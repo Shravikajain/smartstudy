@@ -20,7 +20,8 @@ import java.util.Objects;
 @Service
 public class QuestionGenerationService {
 
-    private static final int MAX_GENERATED_QUESTIONS = 50;
+    // Matches the ML service's per-request limit (GenerateRequest.count le=20).
+    private static final int MAX_GENERATED_QUESTIONS = 20;
 
     private final TopicRepository topicRepository;
     private final QuestionRepository questionRepository;
@@ -34,7 +35,7 @@ public class QuestionGenerationService {
         this.mlClient = mlClient;
     }
 
-    @Transactional
+    // Not @Transactional, so no database connection is held during the LLM call; saveAll commits on its own.
     public List<Question> generate(Long topicId, int count, User owner) {
         if (count < 1 || count > MAX_GENERATED_QUESTIONS) {
             throw new IllegalArgumentException("Question count must be between 1 and "

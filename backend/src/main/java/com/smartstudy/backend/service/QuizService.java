@@ -6,8 +6,12 @@ import java.util.Objects;
 import java.util.Set;
 import java.io.IOException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,6 +23,7 @@ import com.smartstudy.backend.dto.ml.MlDetectResponse;
 import com.smartstudy.backend.dto.ml.MlGradeAnswerRequest;
 import com.smartstudy.backend.dto.ml.MlGradeAnswerResponse;
 import com.smartstudy.backend.engine.IrtEngine;
+import com.smartstudy.backend.exception.MlServiceUnavailableException;
 import com.smartstudy.backend.model.Question;
 import com.smartstudy.backend.model.QuizAnswer;
 import com.smartstudy.backend.model.QuizSession;
@@ -32,8 +37,10 @@ import com.smartstudy.backend.repository.QuizSessionRepository;
 @Service
 public class QuizService {
 
+    private static final Logger log = LoggerFactory.getLogger(QuizService.class);
     private static final int DEFAULT_QUESTION_COUNT = 10;
     private static final int MAX_QUESTION_COUNT = 50;
+    private static final List<String> QUESTION_MODES = List.of("multiple_choice", "subjective", "mixed");
 
     private final QuizSessionRepository sessionRepository;
     private final QuizAnswerRepository answerRepository;
@@ -41,19 +48,22 @@ public class QuizService {
     private final SubjectService subjectService;
     private final MlClient mlClient;
     private final PdfTextExtractor pdfTextExtractor;
+    private final TransactionTemplate transactionTemplate;
 
     public QuizService(QuizSessionRepository sessionRepository,
                        QuizAnswerRepository answerRepository,
                        QuestionRepository questionRepository,
                        SubjectService subjectService,
                        MlClient mlClient,
-                       PdfTextExtractor pdfTextExtractor) {
+                       PdfTextExtractor pdfTextExtractor,
+                       PlatformTransactionManager transactionManager) {
         this.sessionRepository = sessionRepository;
         this.answerRepository = answerRepository;
         this.questionRepository = questionRepository;
         this.subjectService = subjectService;
         this.mlClient = mlClient;
         this.pdfTextExtractor = pdfTextExtractor;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Transactional
@@ -64,6 +74,19 @@ public class QuizService {
     @Transactional
     public StartQuizResponse start(Long subjectId, Integer requestedCount,
                                    List<Long> requestedQuestionIds, User user) {
+        return start(subjectId, requestedCount, requestedQuestionIds, null, user);
+    }
+
+    /**
+     * @param questionMode multiple_choice, subjective or mixed; null keeps every question type
+     */
+    @Transactional
+    public StartQuizResponse start(Long subjectId, Integer requestedCount,
+                                   List<Long> requestedQuestionIds, String questionMode, User user) {
+        if (questionMode != null && !QUESTION_MODES.contains(questionMode)) {
+            throw new IllegalArgumentException(
+                    "questionType must be multiple_choice, subjective, or mixed");
+        }
         Subject subject = subjectService.getSubjectByIdForUser(subjectId, user);
         List<Question> pool;
         if (requestedQuestionIds == null) {
@@ -85,6 +108,14 @@ public class QuizService {
         if (pool.isEmpty()) {
             throw new IllegalArgumentException("No questions yet for this subject");
         }
+        if ("multiple_choice".equals(questionMode) || "subjective".equals(questionMode)) {
+            boolean subjective = questionMode.equals("subjective");
+            pool = pool.stream().filter(question -> question.isSubjective() == subjective).toList();
+            if (pool.isEmpty()) {
+                throw new IllegalArgumentException("No " + (subjective ? "subjective" : "multiple-choice")
+                        + " questions yet for this subject. Generate some from your past papers first.");
+            }
+        }
 
         int maxQuestions = requestedCount == null ? DEFAULT_QUESTION_COUNT : requestedCount;
         if (maxQuestions < 1 || maxQuestions > MAX_QUESTION_COUNT) {
@@ -96,9 +127,10 @@ public class QuizService {
                 .orElseThrow(() -> new IllegalArgumentException("No questions yet for this subject"));
 
         QuizSession session = new QuizSession(user, subject, maxQuestions);
-        if (requestedQuestionIds != null) {
+        if (requestedQuestionIds != null || questionMode != null) {
             session.setQuestionPool(pool);
         }
+        session.setQuestionMode(modeOf(pool));
         session.setCurrentQuestion(first);
         session = sessionRepository.save(session);
         return new StartQuizResponse(session.getId(), response(first, 1, maxQuestions, null), 0.0);
@@ -126,24 +158,53 @@ public class QuizService {
         }
 
         boolean correct = selectedIndex == current.getCorrectIndex();
-        return recordAnswer(session, current, correct, null, null, null);
+        return recordAnswer(session, current, selectedIndex, correct, null, null, null, null);
     }
 
-    @Transactional
+    private static String modeOf(List<Question> pool) {
+        boolean anySubjective = pool.stream().anyMatch(Question::isSubjective);
+        boolean anyMultipleChoice = pool.stream().anyMatch(question -> !question.isSubjective());
+        return anySubjective && anyMultipleChoice ? "mixed"
+                : anySubjective ? "subjective" : "multiple_choice";
+    }
+
+    // Not @Transactional: OCR, AI detection and LLM grading can take minutes, so they run between
+    // two short transactions instead of holding a database connection.
     public AnswerResult answerSubjective(Long sessionId, String answerText,
                                          MultipartFile answerPdf, User user) {
-        QuizSession session = activeSession(sessionId, user);
-        Question current = session.getCurrentQuestion();
-        if (!current.isSubjective()) {
-            throw new IllegalArgumentException("This question does not accept a written answer");
-        }
+        Question question = transactionTemplate.execute(status -> {
+            Question current = activeSession(sessionId, user).getCurrentQuestion();
+            if (!current.isSubjective()) {
+                throw new IllegalArgumentException("This question does not accept a written answer");
+            }
+            return current;
+        });
 
         String answer = extractAnswer(answerText, answerPdf);
-        MlDetectResponse aiAssessment = mlClient.detect(new MlDetectRequest(answer));
+        MlDetectResponse aiAssessment = detectAiWriting(answer);
         MlGradeAnswerResponse grade = mlClient.gradeAnswer(new MlGradeAnswerRequest(
-                current.getPrompt(), current.getReferenceAnswer(), current.getExplanation(), answer));
+                question.getPrompt(), question.getReferenceAnswer(), question.getExplanation(), answer));
         boolean correct = grade.score() >= 0.6;
-        return recordAnswer(session, current, correct, grade.score(), grade.feedback(), aiAssessment);
+
+        return transactionTemplate.execute(status -> {
+            QuizSession session = activeSession(sessionId, user);
+            Question current = session.getCurrentQuestion();
+            if (!Objects.equals(current.getId(), question.getId())) {
+                throw new IllegalArgumentException("This question has already been answered");
+            }
+            return recordAnswer(session, current, 0, correct, answer, grade.score(), grade.feedback(),
+                    aiAssessment);
+        });
+    }
+
+    // The AI-writing estimate is advisory: if the detector model is unavailable, still grade the answer.
+    private MlDetectResponse detectAiWriting(String answer) {
+        try {
+            return mlClient.detect(new MlDetectRequest(answer));
+        } catch (MlServiceUnavailableException | IllegalStateException exception) {
+            log.warn("AI-writing detection skipped: {}", exception.getMessage());
+            return null;
+        }
     }
 
     private String extractAnswer(String answerText, MultipartFile answerPdf) {
@@ -197,9 +258,9 @@ public class QuizService {
         return session;
     }
 
-    private AnswerResult recordAnswer(QuizSession session, Question current, boolean correct,
-                                      Double score, String gradingFeedback,
-                                      MlDetectResponse aiAssessment) {
+    private AnswerResult recordAnswer(QuizSession session, Question current, int selectedIndex,
+                                      boolean correct, String answerText, Double score,
+                                      String gradingFeedback, MlDetectResponse aiAssessment) {
         double abilityBefore = session.getAbilityEstimate();
         double abilityAfter = IrtEngine.updateAbility(abilityBefore, current.getDifficulty(),
                 correct, session.getAnsweredCount());
@@ -208,9 +269,12 @@ public class QuizService {
         current.setDifficulty(updatedDifficulty);
         current.incrementTimesAnswered();
         questionRepository.save(current);
-        answerRepository.save(new QuizAnswer(session, current,
-                current.isSubjective() ? 0 : current.getCorrectIndex(), correct,
-                abilityBefore, abilityAfter));
+        QuizAnswer quizAnswer = new QuizAnswer(session, current, selectedIndex, correct,
+                abilityBefore, abilityAfter);
+        if (current.isSubjective()) {
+            quizAnswer.recordWrittenAnswer(answerText, score, gradingFeedback, aiAssessment);
+        }
+        answerRepository.save(quizAnswer);
         session.recordAnswer(correct, abilityAfter);
 
         QuizQuestionResponse nextResponse = null;

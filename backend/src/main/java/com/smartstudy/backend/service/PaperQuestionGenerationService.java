@@ -9,7 +9,8 @@ import java.util.Objects;
 import java.util.Comparator;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.smartstudy.backend.dto.ml.MlAnalyzeResponse;
 import com.smartstudy.backend.dto.ml.MlCluster;
@@ -38,25 +39,28 @@ public class PaperQuestionGenerationService {
     private final MlClient mlClient;
     private final TopicRepository topicRepository;
     private final QuestionRepository questionRepository;
+    private final TransactionTemplate transactionTemplate;
 
     public PaperQuestionGenerationService(SubjectService subjectService,
                                           SubjectAnalysisService analysisService,
                                           MlClient mlClient,
                                           TopicRepository topicRepository,
-                                          QuestionRepository questionRepository) {
+                                          QuestionRepository questionRepository,
+                                          PlatformTransactionManager transactionManager) {
         this.subjectService = subjectService;
         this.analysisService = analysisService;
         this.mlClient = mlClient;
         this.topicRepository = topicRepository;
         this.questionRepository = questionRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
     public GeneratedSet generate(Long subjectId, int count, User owner) {
         return generate(subjectId, count, "multiple_choice", owner);
     }
 
-    @Transactional
+    // Not @Transactional: analysis and LLM generation can take minutes, so only the final
+    // inserts run in a transaction and no database connection is held while waiting on the ML service.
     public GeneratedSet generate(Long subjectId, int count, String format, User owner) {
         if (count < 1 || count > MAX_QUESTIONS) {
             throw new IllegalArgumentException("Question count must be between 1 and " + MAX_QUESTIONS);
@@ -89,6 +93,11 @@ public class PaperQuestionGenerationService {
         }
         String context = topicContext(clusters, topicNames);
         List<Draft> drafts = generateDrafts(subject.getName(), topicNames, context, count, format);
+        return transactionTemplate.execute(status -> save(subject, drafts));
+    }
+
+    private GeneratedSet save(Subject subject, List<Draft> drafts) {
+        Long subjectId = subject.getId();
         Map<String, Topic> topicsByName = new HashMap<>();
         for (Topic existing : topicRepository.findBySubjectId(subjectId)) {
             topicsByName.put(existing.getName().toLowerCase(Locale.ROOT), existing);

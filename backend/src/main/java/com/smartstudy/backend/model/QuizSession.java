@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToMany;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,6 +60,14 @@ public class QuizSession {
     @OrderColumn(name = "question_order")
     private List<Question> questionPool = new ArrayList<>();
 
+    // Question types the learner chose: multiple_choice, subjective or mixed (null on older sessions).
+    @Column(name = "question_mode", length = 32)
+    private String questionMode;
+
+    private Instant startedAt = Instant.now();
+
+    private Instant completedAt;
+
     protected QuizSession() {
     }
 
@@ -78,6 +87,13 @@ public class QuizSession {
     public QuizStatus getStatus() { return status; }
     public Question getCurrentQuestion() { return currentQuestion; }
     public List<Question> getQuestionPool() { return List.copyOf(questionPool); }
+    public String getQuestionMode() { return questionMode; }
+    public Instant getStartedAt() { return startedAt; }
+    public Instant getCompletedAt() { return completedAt; }
+
+    public void setQuestionMode(String questionMode) {
+        this.questionMode = questionMode;
+    }
 
     public void setCurrentQuestion(Question currentQuestion) {
         this.currentQuestion = currentQuestion;
@@ -98,5 +114,6 @@ public class QuizSession {
     public void finish() {
         status = QuizStatus.COMPLETED;
         currentQuestion = null;
+        completedAt = Instant.now();
     }
 }

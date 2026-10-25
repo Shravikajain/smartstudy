@@ -26,7 +26,9 @@ Prerequisites:
    Generate a JWT secret and service key in PowerShell:
 
    ```powershell
-   [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+   $bytes = New-Object byte[] 32
+   [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+   [Convert]::ToBase64String($bytes)
    ```
 
    Use separate generated values for `JWT_SECRET` and `ML_INTERNAL_KEY`. Set `POSTGRES_PASSWORD` to a new database password. Do not commit `.env` or share credentials in chat.
@@ -57,6 +59,17 @@ docker compose --env-file ..\.env down
 
 To delete the local database and uploads as well, use `docker compose --env-file ..\.env down -v`; this permanently removes those local Docker volumes.
 
+## Features
+
+- **Practice sets from past papers**: upload 1–5 PDFs and generate multiple-choice, subjective, or both kinds of questions across the topics found in the papers.
+- **Tests from your question bank**: on a subject page, choose multiple choice, subjective or both, and how many questions. Quizzes adapt difficulty to your answers.
+- **My tests**: every test is saved. Reviewing one shows each question, your answer, the correct option or model answer and marking guide, the grade and feedback, and the AI-writing check for written answers.
+- **AI-writing check on written answers**: each subjective answer gets an estimated probability that it was AI-written, labelled *likely human-written* (below 35%), *uncertain* (35–60%) or *likely AI-written* (60% and above). It never changes the grade.
+- **Authenticity check**: paste text or upload a PDF, `.txt` or `.md` file (up to 60,000 characters) to estimate how likely it is that it was AI-written, with a section-by-section breakdown for longer documents. Results are kept in your history; the text itself is not stored.
+- **AI interview practice** with optional voice dictation.
+
+AI-writing detection is an estimate, not proof. It can miss AI-written text and can wrongly flag human writing, especially short, heavily edited or non-native-English text.
+
 ## Services
 
 - `Frontend`: static browser app served by Nginx.
@@ -67,3 +80,7 @@ To delete the local database and uploads as well, use `docker compose --env-file
 Docker Compose builds the backend and ML service images from the adjacent `backend` and `ml_services` folders. Each teammate should provide their own `.env`; provider keys and signing secrets are not included in this repository.
 
 Interview dictation records audio in the browser and transcribes it with the local CPU Whisper model in the ML container, so it also works in Firefox and does not send audio to an external speech provider. The first recording downloads the configured model (`WHISPER_MODEL`, default `base`); Docker Compose persists it in the `whisper-cache` volume. Microphone access requires localhost or HTTPS. Text entry remains available if recording or transcription is unavailable.
+
+The ML service downloads three small local models when it starts: the AI-writing detector, the Whisper speech model, and a sentence-embedding model (`all-MiniLM-L6-v2`) that groups past-paper questions by meaning as well as shared words. Docker Compose keeps them in the `whisper-cache` volume, so later starts reuse them. If the embedding model cannot be downloaded, analysis falls back to word-based grouping. Set `ML_EMBEDDINGS=false` to always use word-based grouping, or `ML_WARMUP=false` to load models only on first use.
+
+Every ML endpoint except `/health` requires the `X-Internal-Key` header, which the backend sends automatically. When you run the backend and ML service outside Docker, set the same `ML_INTERNAL_KEY` for both.

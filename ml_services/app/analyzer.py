@@ -1,17 +1,31 @@
+import logging
+import math
 import re
 
+from scipy.sparse import csr_matrix, hstack
 from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics import silhouette_score
 
+from .config import ML_EMBEDDINGS
+from .embeddings import EmbeddingModelUnavailableError, embed_if_ready
 from .question_splitter import split_questions
 from .schemas import AnalyzeRequest, AnalyzeResponse, ClusterOut, HotQuestionOut, QuestionOut
+
+logger = logging.getLogger(__name__)
+
+# Share of the clustering similarity that comes from sentence meaning rather than shared words.
+# Embeddings group reworded questions on one topic ("N-Queens" / "8 queens puzzle"), which
+# TF-IDF scores as unrelated. Hot-question detection stays on TF-IDF: MiniLM scores different
+# questions on the same topic almost as high as true repeats, so it would merge them.
+EMBEDDING_WEIGHT = 0.6
 
 # Words that appear in every exam and say nothing about the topic.
 EXAM_WORDS = {
     "explain", "write", "short", "note", "notes", "discuss", "define", "describe",
     "mark", "marks", "following", "briefly", "example", "examples", "state", "give",
     "using", "illustrate", "differentiate", "compare", "list",
+    "solve", "find", "analyse", "analyze", "draw", "show", "calculate", "derive",
 }
 STOP_WORDS = list(ENGLISH_STOP_WORDS | EXAM_WORDS)
 MARKS = re.compile(r"[\[(]\s*\d+\s*marks?\s*[\])]")
@@ -91,6 +105,26 @@ def find_hot_questions(X, questions: list[QuestionOut], threshold: float) -> lis
     return hot
 
 
+def cluster_features(X, texts: list[str]):
+    """TF-IDF rows joined with weighted sentence embeddings; falls back to TF-IDF alone."""
+    if not ML_EMBEDDINGS:
+        return X
+    try:
+        embeddings = embed_if_ready(texts)
+    except EmbeddingModelUnavailableError:
+        logger.warning("Embedding model unavailable; clustering with TF-IDF only", exc_info=True)
+        return X
+    if embeddings is None:
+        logger.info("Embedding model is still loading; clustering with TF-IDF only")
+        return X
+    # Both blocks are L2-normalized, so a row's cosine similarity is the weighted average of the
+    # TF-IDF and embedding similarities. The TF-IDF block stays first for keyword extraction.
+    return hstack([
+        X * math.sqrt(1 - EMBEDDING_WEIGHT),
+        csr_matrix(embeddings * math.sqrt(EMBEDDING_WEIGHT)),
+    ]).tocsr()
+
+
 def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     questions: list[QuestionOut] = []
     for paper in req.papers:
@@ -107,8 +141,9 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     except ValueError:
         raise ValueError("The questions contained no usable words")
 
-    k = choose_k(X, req.max_clusters)
-    km = KMeans(n_clusters=k, n_init=5, random_state=42).fit(X)
+    features = cluster_features(X, [q.text for q in questions])
+    k = choose_k(features, req.max_clusters)
+    km = KMeans(n_clusters=k, n_init=5, random_state=42).fit(features)
     terms = vectorizer.get_feature_names_out()
     total_papers = len(req.papers)
 
@@ -117,7 +152,7 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         idx = [i for i, label in enumerate(km.labels_) if label == c]
         if not idx:
             continue
-        center = km.cluster_centers_[c]
+        center = km.cluster_centers_[c][: len(terms)]     # TF-IDF block only
         top_terms = center.argsort()[::-1][:5]
         keywords = [str(terms[t]) for t in top_terms if center[t] > 0]
         paper_ids = {questions[i].paper_id for i in idx}

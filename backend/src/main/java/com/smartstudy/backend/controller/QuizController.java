@@ -1,7 +1,10 @@
 package com.smartstudy.backend.controller;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -12,9 +15,13 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.smartstudy.backend.dto.AnswerRequest;
 import com.smartstudy.backend.dto.AnswerResult;
+import com.smartstudy.backend.dto.QuestionBankResponse;
+import com.smartstudy.backend.dto.QuizHistoryItem;
+import com.smartstudy.backend.dto.QuizReviewResponse;
 import com.smartstudy.backend.dto.StartQuizRequest;
 import com.smartstudy.backend.dto.StartQuizResponse;
 import com.smartstudy.backend.model.User;
+import com.smartstudy.backend.service.QuizHistoryService;
 import com.smartstudy.backend.service.QuizService;
 import com.smartstudy.backend.service.UserService;
 
@@ -23,11 +30,34 @@ import com.smartstudy.backend.service.UserService;
 public class QuizController {
 
     private final QuizService quizService;
+    private final QuizHistoryService historyService;
     private final UserService userService;
 
-    public QuizController(QuizService quizService, UserService userService) {
+    public QuizController(QuizService quizService, QuizHistoryService historyService,
+                          UserService userService) {
         this.quizService = quizService;
+        this.historyService = historyService;
         this.userService = userService;
+    }
+
+    @GetMapping("/subjects/{subjectId}/question-bank")
+    public ResponseEntity<QuestionBankResponse> questionBank(@PathVariable Long subjectId,
+                                                             Authentication authentication) {
+        User user = userService.getCurrentUser(authentication);
+        return ResponseEntity.ok(historyService.questionBank(subjectId, user));
+    }
+
+    @GetMapping("/quizzes")
+    public ResponseEntity<List<QuizHistoryItem>> history(Authentication authentication) {
+        User user = userService.getCurrentUser(authentication);
+        return ResponseEntity.ok(historyService.history(user));
+    }
+
+    @GetMapping("/quizzes/{sessionId}")
+    public ResponseEntity<QuizReviewResponse> review(@PathVariable Long sessionId,
+                                                     Authentication authentication) {
+        User user = userService.getCurrentUser(authentication);
+        return ResponseEntity.ok(historyService.review(sessionId, user));
     }
 
     @PostMapping("/subjects/{subjectId}/quiz")
@@ -37,7 +67,8 @@ public class QuizController {
         User user = userService.getCurrentUser(authentication);
         Integer maxQuestions = request == null ? null : request.getMaxQuestions();
         return ResponseEntity.ok(quizService.start(subjectId, maxQuestions,
-                request == null ? null : request.getQuestionIds(), user));
+                request == null ? null : request.getQuestionIds(),
+                request == null ? null : request.getQuestionType(), user));
     }
 
     @PostMapping("/quiz/{sessionId}/answer")

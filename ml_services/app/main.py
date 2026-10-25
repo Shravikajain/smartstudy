@@ -1,16 +1,18 @@
+import logging
 import secrets
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
 
-# Import your new module here
-from .ai_detector import AiModelUnavailableError, detect_ai
-
+from .ai_detector import AiModelUnavailableError, classifier_loader, detect_ai
 from .analyzer import analyze
 from .llm_client import LlmError, generate_questions, grade_answer, run_interview_turn
-from .config import ML_INTERNAL_KEY
+from .config import ML_EMBEDDINGS, ML_INTERNAL_KEY, ML_WARMUP
+from .embeddings import encoder_loader
 from .pdf_ocr import MAX_PDF_BYTES, PdfOcrError, extract_pdf_text
 from .transcription import MAX_AUDIO_BYTES, TranscriptionError, transcribe_audio
+from .transcription import model_loader as whisper_loader
 from .schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -24,29 +26,53 @@ from .schemas import (
     InterviewTurnResponse,
 )
 
-app = FastAPI(title="Smart Study ML Service")
+# Show the model loaders' progress messages next to uvicorn's own logs.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Start downloading/loading models in the background. Requests that arrive first never wait:
+    # analysis falls back to TF-IDF, and detection/transcription report that the model is loading.
+    if ML_WARMUP:
+        classifier_loader.start()
+        whisper_loader.start()
+        if ML_EMBEDDINGS:
+            encoder_loader.start()
+    yield
+
+
+def require_internal_key(x_internal_key: str | None = Header(default=None)):
+    if not ML_INTERNAL_KEY:
+        raise HTTPException(status_code=503, detail="Internal service authentication is not configured")
+    if not x_internal_key or not secrets.compare_digest(x_internal_key, ML_INTERNAL_KEY):
+        raise HTTPException(status_code=403, detail="Internal service authentication failed")
+
+
+app = FastAPI(title="Smart Study ML Service", lifespan=lifespan)
+# Every endpoint except /health is for the backend only.
+internal = APIRouter(dependencies=[Depends(require_internal_key)])
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-@app.post("/analyze", response_model=AnalyzeResponse)
+@internal.post("/analyze", response_model=AnalyzeResponse)
 def analyze_papers(request: AnalyzeRequest):
     try:
         return analyze(request)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-@app.post("/generate-questions", response_model=GenerateResponse)
+@internal.post("/generate-questions", response_model=GenerateResponse)
 def generate_exam_questions(request: GenerateRequest):
     try:
         return GenerateResponse(questions=generate_questions(request))
     except LlmError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
-# Add your new endpoint here
-@app.post("/detect-ai", response_model=DetectAiResponse)
+@internal.post("/detect-ai", response_model=DetectAiResponse)
 def detect_ai_content(request: DetectAiRequest):
     try:
         return detect_ai(request)
@@ -54,7 +80,7 @@ def detect_ai_content(request: DetectAiRequest):
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
-@app.post("/grade-answer", response_model=GradeAnswerResponse)
+@internal.post("/grade-answer", response_model=GradeAnswerResponse)
 def grade_subjective_answer(request: GradeAnswerRequest):
     try:
         return grade_answer(request)
@@ -62,7 +88,7 @@ def grade_subjective_answer(request: GradeAnswerRequest):
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
-@app.post("/interview/turn", response_model=InterviewTurnResponse)
+@internal.post("/interview/turn", response_model=InterviewTurnResponse)
 def interview_turn(request: InterviewTurnRequest):
     try:
         return run_interview_turn(request)
@@ -70,16 +96,8 @@ def interview_turn(request: InterviewTurnRequest):
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
-@app.post("/extract-pdf-text")
-async def extract_scanned_pdf_text(
-    file: UploadFile = File(...),
-    x_internal_key: str | None = Header(default=None),
-):
-    if not ML_INTERNAL_KEY:
-        raise HTTPException(status_code=503, detail="PDF OCR is not configured")
-    if not x_internal_key or not secrets.compare_digest(x_internal_key, ML_INTERNAL_KEY):
-        raise HTTPException(status_code=403, detail="Internal service authentication failed")
-
+@internal.post("/extract-pdf-text")
+async def extract_scanned_pdf_text(file: UploadFile = File(...)):
     pdf_bytes = await file.read(MAX_PDF_BYTES + 1)
     if len(pdf_bytes) > MAX_PDF_BYTES:
         raise HTTPException(status_code=413, detail="PDF is too large for scanned-page OCR (20 MB maximum).")
@@ -91,17 +109,11 @@ async def extract_scanned_pdf_text(
     return {"text": text, "pageCount": page_count}
 
 
-@app.post("/transcribe-audio")
+@internal.post("/transcribe-audio")
 async def transcribe_interview_audio(
     file: UploadFile = File(...),
     language: str | None = Form(default=None),
-    x_internal_key: str | None = Header(default=None),
 ):
-    if not ML_INTERNAL_KEY:
-        raise HTTPException(status_code=503, detail="Audio transcription is not configured")
-    if not x_internal_key or not secrets.compare_digest(x_internal_key, ML_INTERNAL_KEY):
-        raise HTTPException(status_code=403, detail="Internal service authentication failed")
-
     audio_bytes = await file.read(MAX_AUDIO_BYTES + 1)
     if len(audio_bytes) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="The audio recording is too large (10 MB maximum).")
@@ -113,3 +125,6 @@ async def transcribe_interview_audio(
     except TranscriptionError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return {"text": text, "language": detected_language}
+
+
+app.include_router(internal)

@@ -13,6 +13,7 @@ import com.smartstudy.backend.dto.ml.MlInterviewTurnRequest;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnResponse;
 import com.smartstudy.backend.dto.ml.MlTranscriptionResponse;
 import com.smartstudy.backend.dto.ml.MlCluster;
+import com.smartstudy.backend.dto.ml.MlPassageScore;
 import com.smartstudy.backend.dto.ml.MlQuestion;
 import com.smartstudy.backend.model.Question;
 import com.smartstudy.backend.model.QuestionType;
@@ -320,6 +321,128 @@ class QuizFlowIntegrationTest {
                 .andExpect(jsonPath("$.score").value(0.85))
                 .andExpect(jsonPath("$.aiWritingAssessment.aiProbability").value(0.82))
                 .andExpect(jsonPath("$.finished").value(true));
+    }
+
+    @Test
+    void takenTestsAreStoredForReviewAndPracticeCanBeLimitedToOneQuestionType() throws Exception {
+        String auth = registerAndLogin("history@test.com");
+        Integer subjectId = JsonPath.read(
+                postJson("/api/subjects", auth, "{\"name\":\"Algorithms\"}"), "$.id");
+        when(analysisService.analyze(any(), any())).thenReturn(new SubjectAnalysisResponse(
+                new MlAnalyzeResponse(1, 1, List.of(new MlCluster(1, List.of("Dynamic programming"),
+                        1, 1, 1.0, List.of(new MlQuestion(1L, 2025, "Explain dynamic programming.")))),
+                        List.of()), LocalDateTime.now()));
+        when(mlClient.generateQuestions(any())).thenAnswer(invocation -> {
+            MlGenerateRequest request = invocation.getArgument(0);
+            if (request.questionType().equals("subjective")) {
+                return new MlGenerateResponse(List.of(new MlGeneratedQuestion(
+                        "Explain memoization.", List.of(), null, "Rubric: caching results.", 3,
+                        "subjective", "Memoization caches the results of subproblems.")));
+            }
+            return new MlGenerateResponse(List.of(new MlGeneratedQuestion(
+                    "Which property supports dynamic programming?",
+                    List.of("Optimal substructure", "Random ordering", "Unique values", "No recurrence"),
+                    0, "It relies on optimal substructure.", 3)));
+        });
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/subjects/{id}/questions/generate-from-papers", subjectId)
+                        .file(new MockMultipartFile("files", "paper.pdf", "application/pdf", "pdf".getBytes()))
+                        .param("count", "2").param("format", "mixed")
+                        .header("Authorization", auth))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/subjects/{id}/question-bank", subjectId).header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.multipleChoice").value(1))
+                .andExpect(jsonPath("$.subjective").value(1));
+
+        // Practice only the subjective question bank, then answer it.
+        String quizBody = postJson("/api/subjects/{id}/quiz", auth,
+                "{\"maxQuestions\":5,\"questionType\":\"subjective\"}", subjectId);
+        Integer sessionId = JsonPath.read(quizBody, "$.sessionId");
+        assertThat((String) JsonPath.read(quizBody, "$.question.questionType")).isEqualTo("SUBJECTIVE");
+        assertThat((Integer) JsonPath.read(quizBody, "$.question.totalQuestions")).isEqualTo(1);
+        when(mlClient.detect(any())).thenReturn(
+                new MlDetectResponse(true, 0.82, 0.18, 0.4, "Some patterns resemble AI writing."));
+        when(mlClient.gradeAnswer(any())).thenReturn(new MlGradeAnswerResponse(0.75, "Good, add an example."));
+        String answerText = "Memoization stores the result of each subproblem the first time it is solved and reuses it later.";
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/quiz/{id}/subjective-answer", sessionId)
+                        .param("answerText", answerText)
+                        .header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.finished").value(true));
+
+        mockMvc.perform(get("/api/quizzes").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sessionId").value(sessionId))
+                .andExpect(jsonPath("$[0].subjectName").value("Algorithms"))
+                .andExpect(jsonPath("$[0].questionMode").value("subjective"))
+                .andExpect(jsonPath("$[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$[0].averageWrittenScore").value(0.75))
+                .andExpect(jsonPath("$[0].aiFlaggedCount").value(1))
+                .andExpect(jsonPath("$[0].completedAt").isNotEmpty());
+        mockMvc.perform(get("/api/quizzes/{id}", sessionId).header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answers[0].prompt").value("Explain memoization."))
+                .andExpect(jsonPath("$.answers[0].answerText").value(answerText))
+                .andExpect(jsonPath("$.answers[0].referenceAnswer")
+                        .value("Memoization caches the results of subproblems."))
+                .andExpect(jsonPath("$.answers[0].score").value(0.75))
+                .andExpect(jsonPath("$.answers[0].feedback").value("Good, add an example."))
+                .andExpect(jsonPath("$.answers[0].aiProbability").value(0.82))
+                .andExpect(jsonPath("$.answers[0].aiFlagged").value(true));
+
+        String otherAuth = registerAndLogin("history-intruder@test.com");
+        mockMvc.perform(get("/api/quizzes/{id}", sessionId).header("Authorization", otherAuth))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/quizzes").header("Authorization", otherAuth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void uploadedMaterialCanBeCheckedForAiWritingAndChecksAreListed() throws Exception {
+        String auth = registerAndLogin("authenticity@test.com");
+        when(mlClient.detect(any())).thenReturn(new MlDetectResponse(true, 0.7, 0.3, 0.3,
+                "The detector flagged this text.", List.of(
+                        new MlPassageScore("First section", 0.9),
+                        new MlPassageScore("Second section", 0.5))));
+        String essay = "My notes on photosynthesis. ".repeat(10);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/authenticity/check")
+                        .file(new MockMultipartFile("file", "notes.txt", "text/plain",
+                                essay.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                        .header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceName").value("notes.txt"))
+                .andExpect(jsonPath("$.characterCount").value(essay.strip().length()))
+                .andExpect(jsonPath("$.aiProbability").value(0.7))
+                .andExpect(jsonPath("$.aiGenerated").value(true))
+                .andExpect(jsonPath("$.passageCount").value(2))
+                .andExpect(jsonPath("$.flaggedPassageCount").value(1))
+                .andExpect(jsonPath("$.passages[0].aiProbability").value(0.9));
+
+        mockMvc.perform(get("/api/authenticity/checks").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sourceName").value("notes.txt"))
+                .andExpect(jsonPath("$[0].flaggedPassageCount").value(1))
+                .andExpect(jsonPath("$[0].passages").isEmpty());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/authenticity/check")
+                        .param("text", "too short")
+                        .header("Authorization", auth))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(containsString("at least 50 characters")));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/authenticity/check")
+                        .file(new MockMultipartFile("file", "notes.docx", "application/octet-stream",
+                                essay.getBytes()))
+                        .header("Authorization", auth))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Upload a PDF, .txt or .md file"));
     }
 
     @Test
