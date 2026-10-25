@@ -17,10 +17,11 @@ Prerequisites:
    cd smartstudy
    ```
 
-2. Create your own local environment file and set fresh secret values:
+2. Create your own local environment files from the examples, then set fresh secret values:
 
    ```powershell
    Copy-Item .env.example .env
+   Copy-Item ml_services\.env.example ml_services\.env
    ```
 
    Generate a JWT secret and service key in PowerShell:
@@ -33,7 +34,7 @@ Prerequisites:
 
    Use separate generated values for `JWT_SECRET` and `ML_INTERNAL_KEY`. Set `POSTGRES_PASSWORD` to a new database password. Do not commit `.env` or share credentials in chat.
 
-   Set your provider key as `OLLAMA_API_KEY` in `ml_services/.env` (create the file if it does not exist). The ML container reads this file at startup. It is ignored by Git and is not included in the container image.
+   Set your provider key as `OLLAMA_API_KEY` in `ml_services/.env`. The ML container reads this file at startup. It is ignored by Git and is not included in the container image.
 
 3. Start the application:
 
@@ -42,7 +43,45 @@ Prerequisites:
    docker compose --env-file ..\.env up --build -d
    ```
 
-4. Open [http://localhost:3001](http://localhost:3001). Change `FRONTEND_PORT` in `.env` if that port is already in use.
+   The first build downloads Python, Java and PyTorch packages and can take 15–30 minutes on a slow connection.
+
+4. Wait for the ML models. On first start the ML service downloads three local models (about 750 MB in total). The app works meanwhile, but the AI-writing check and voice dictation report "still loading" until they finish. Check progress with:
+
+   ```powershell
+   docker compose --env-file ..\.env logs ml-service | Select-String "model loaded|could not be loaded"
+   ```
+
+   All three are ready when the log shows `AI detector model loaded`, `Whisper model loaded` and `Sentence embedding model loaded`. They are kept in a Docker volume, so later starts are fast.
+
+5. Open [http://localhost:3001](http://localhost:3001) and create an account. Change `FRONTEND_PORT` in `.env` if that port is already in use.
+
+### Updating an existing copy
+
+If you already have Smart Study running, pull the latest code and rebuild:
+
+```powershell
+git pull
+Set-Location Frontend
+docker compose --env-file ..\.env up --build -d
+```
+
+Compare `.env.example` and `ml_services\.env.example` with your own `.env` files and copy over any settings you are missing.
+
+Your database and uploaded papers are kept. The backend adds new database columns and tables automatically on start. Your browser picks up the new interface on the next page load.
+
+### Troubleshooting
+
+- **The backend container exits with `password authentication failed for user "smartstudy"`.** Your database volume was created with an older `POSTGRES_PASSWORD`. Postgres only reads that setting when the volume is first created. To keep your data, set the database password to the one in your current `.env`, then start the backend again:
+
+  ```powershell
+  $password = (Select-String '^POSTGRES_PASSWORD=(.*)$' ..\.env).Matches[0].Groups[1].Value
+  docker compose --env-file ..\.env exec db psql -U smartstudy -d smartstudy -c "ALTER USER smartstudy PASSWORD '$password'"
+  docker compose --env-file ..\.env up -d backend
+  ```
+
+- **The build fails with `Read timed out` while installing packages.** This is a network timeout. Run the same `up --build` command again; downloaded packages are cached, so it continues where it stopped.
+- **The AI-writing check or voice dictation says the model is still loading.** The first-start download is still running (see step 4). Downloads resume after a restart.
+- **`docker` reports that it cannot connect to the Docker engine.** Start Docker Desktop and wait until it shows that the engine is running.
 
 View container status and logs:
 
