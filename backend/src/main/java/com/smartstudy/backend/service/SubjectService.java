@@ -17,7 +17,10 @@ public class SubjectService {
     }
 
     public Subject createSubject(String name, User owner) {
-        Subject subject = new Subject(name, owner);
+        if (name == null || name.isBlank() || name.length() > 255) {
+            throw new IllegalArgumentException("Enter a subject name (up to 255 characters)");
+        }
+        Subject subject = new Subject(name.trim(), owner);
         return subjectRepository.save(subject);
     }
 

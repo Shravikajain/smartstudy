@@ -2,7 +2,7 @@ from functools import lru_cache
 
 import numpy as np
 
-from .background import BackgroundLoader, transformers_import_lock
+from .background import BackgroundLoader, transformers_lock
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_MODEL_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
@@ -17,14 +17,14 @@ class EmbeddingModelUnavailableError(RuntimeError):
 @lru_cache(maxsize=1)
 def _load_encoder():
     try:
-        with transformers_import_lock:
+        with transformers_lock:
             from transformers import AutoModel, AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            EMBEDDING_MODEL, revision=EMBEDDING_MODEL_REVISION, token=False)
-        model = AutoModel.from_pretrained(
-            EMBEDDING_MODEL, revision=EMBEDDING_MODEL_REVISION, token=False)
-        return tokenizer, model.eval()
+            tokenizer = AutoTokenizer.from_pretrained(
+                EMBEDDING_MODEL, revision=EMBEDDING_MODEL_REVISION, token=False)
+            model = AutoModel.from_pretrained(
+                EMBEDDING_MODEL, revision=EMBEDDING_MODEL_REVISION, token=False)
+            return tokenizer, model.eval()
     except (ImportError, OSError) as e:
         raise EmbeddingModelUnavailableError(
             "Could not load the local sentence-embedding model."

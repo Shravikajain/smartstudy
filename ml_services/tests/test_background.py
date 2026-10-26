@@ -1,5 +1,7 @@
+import sys
 import threading
 from functools import lru_cache
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -47,6 +49,32 @@ def test_failed_load_can_be_retried():
     loader.start()
     loader._thread.join(5)
     assert loader.ready()
+
+
+def test_transformers_models_are_built_under_the_shared_lock(monkeypatch):
+    # Building two models at once left weights on the "meta" device ("Tensor on device meta").
+    from app import background, embeddings
+
+    held = []
+
+    def build(result):
+        return lambda *args, **kwargs: held.append(background.transformers_lock.locked()) or result
+
+    model = SimpleNamespace(eval=lambda: model)
+    fake = ModuleType("transformers")
+    fake.pipeline = build("clf")
+    fake.AutoTokenizer = SimpleNamespace(from_pretrained=build("tok"))
+    fake.AutoModel = SimpleNamespace(from_pretrained=build(model))
+    monkeypatch.setitem(sys.modules, "transformers", fake)
+    ai_detector._get_classifier.cache_clear()
+    embeddings._load_encoder.cache_clear()
+    try:
+        assert ai_detector._get_classifier() == "clf"
+        assert embeddings._load_encoder() == ("tok", model)
+    finally:
+        ai_detector._get_classifier.cache_clear()
+        embeddings._load_encoder.cache_clear()
+    assert held == [True, True, True]
 
 
 def test_detector_reports_loading_instead_of_waiting_for_download(monkeypatch):

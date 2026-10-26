@@ -220,10 +220,45 @@ def _shuffle_options(question: GeneratedQuestion) -> GeneratedQuestion | None:
         return None
     order = list(range(len(question.options)))
     random.shuffle(order)
+    explanation = _relabel_option_references(question.explanation, order)
+    if explanation is None:
+        return question         # unclear which option it means: keep the order the text describes
     return question.model_copy(update={
         "options": [question.options[i] for i in order],
         "correct_index": order.index(question.correct_index),
+        "explanation": explanation,
     })
+
+
+# "Option 0", "option B", "choice (3)": the model sometimes ignores the instruction to refer to
+# options by content, and its positions are wrong once the options are shuffled.
+_OPTION_REFERENCE = re.compile(r"\b((?i:options?|choices?))\s+(\(?)([0-4]|[A-D])(\)?)(?![\w'’])")
+
+
+def _relabel_option_references(explanation: str | None, order: list[int]) -> str | None:
+    """Rewrite positional option references to the shuffled letters, or None if ambiguous."""
+    if not explanation:
+        return explanation
+    references = list(_OPTION_REFERENCE.finditer(explanation))
+    digits = {match.group(3) for match in references if match.group(3).isdigit()}
+    # Indices count from 0 like correct_index; "Option 4" can only mean counting from 1.
+    # With only 1-3 the two readings disagree, so the text cannot be relabelled safely.
+    if digits and "0" not in digits and "4" not in digits:
+        return None
+    first = 1 if "4" in digits else 0
+
+    def old_index(label: str) -> int:
+        return int(label) - first if label.isdigit() else ord(label) - ord("A")
+
+    if any(not 0 <= old_index(match.group(3)) < len(order) for match in references):
+        return None
+    new_position = {old: new for new, old in enumerate(order)}
+
+    def relabel(match: re.Match) -> str:
+        letter = chr(ord("A") + new_position[old_index(match.group(3))])
+        return f"{match.group(1)} {match.group(2)}{letter}{match.group(4)}"
+
+    return _OPTION_REFERENCE.sub(relabel, explanation)
 
 
 # Field names models use instead of the schema's (seen from gpt-oss:120b on Ollama Cloud).

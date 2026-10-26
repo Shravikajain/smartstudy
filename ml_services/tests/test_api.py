@@ -280,6 +280,17 @@ def test_interview_turn_rejects_invalid_history():
     assert response.status_code == 422
 
 
+def test_unexpected_error_is_answered_as_json_instead_of_dropping_the_connection(monkeypatch):
+    def broken(_request):
+        raise RuntimeError("Tensor on device meta is not on the expected device cpu!")
+
+    monkeypatch.setattr(main, "detect_ai", broken)
+    response = client.post("/detect-ai", json={"text": "x" * 60})
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "The ML service hit an unexpected error."}
+
+
 def test_detect_ai_runs_local_classifier_and_maps_chatgpt_label(monkeypatch):
     text = (
         "This is a longer sample essay with several complete sentences. "

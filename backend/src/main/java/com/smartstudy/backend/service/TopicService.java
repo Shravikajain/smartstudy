@@ -21,8 +21,14 @@ public class TopicService {
     }
 
     public Topic createTopic(Long subjectId, String name, String description, User owner) {
+        if (name == null || name.isBlank() || name.length() > 255) {
+            throw new IllegalArgumentException("Enter a topic name (up to 255 characters)");
+        }
+        if (description != null && description.length() > 2000) {
+            throw new IllegalArgumentException("Topic description must be at most 2,000 characters");
+        }
         Subject subject = subjectService.getSubjectByIdForUser(subjectId, owner);
-        Topic topic = new Topic(name, description, subject);
+        Topic topic = new Topic(name.trim(), description, subject);
         return topicRepository.save(topic);
     }
 

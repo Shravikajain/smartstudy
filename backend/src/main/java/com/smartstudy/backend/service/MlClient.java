@@ -1,5 +1,7 @@
 package com.smartstudy.backend.service;
 
+import java.net.ConnectException;
+import java.net.SocketException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -100,22 +102,43 @@ public class MlClient {
 
     private <T> T post(RestClient client, String uri, Object body, MediaType contentType,
                        Class<T> responseType) {
-        try {
-            return client.post()
-                    .uri(uri)
-                    .contentType(contentType)
-                    .body(body)
-                    .retrieve()
-                    .body(responseType);
-        } catch (HttpClientErrorException e) {                 // 4xx: we sent something invalid
-            throw new IllegalArgumentException(detail(e.getResponseBodyAsString(), "The ML service rejected the request"));
-        } catch (HttpServerErrorException e) {                 // 5xx: the ML service or the LLM failed
-            throw new MlServiceUnavailableException(detail(e.getResponseBodyAsString(), "The ML service failed"));
-        } catch (ResourceAccessException e) {                  // connection refused or timeout
-            throw new MlServiceUnavailableException("The ML service is not reachable right now");
-        } catch (RestClientException e) {                      // e.g. the response JSON didn't parse
-            throw new IllegalStateException("Unexpected response from the ML service: " + e.getMessage(), e);
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return client.post()
+                        .uri(uri)
+                        .contentType(contentType)
+                        .body(body)
+                        .retrieve()
+                        .body(responseType);
+            } catch (HttpClientErrorException e) {             // 4xx: we sent something invalid
+                throw new IllegalArgumentException(detail(e.getResponseBodyAsString(), "The ML service rejected the request"));
+            } catch (HttpServerErrorException e) {             // 5xx: the ML service or the LLM failed
+                throw new MlServiceUnavailableException(detail(e.getResponseBodyAsString(), "The ML service failed"));
+            } catch (RestClientException e) {
+                // A pooled connection the ML service had already closed fails with "Connection
+                // reset". ML calls have no side effects, so retry once on a fresh connection.
+                if (connectionDropped(e)) {
+                    if (attempt == 1) {
+                        continue;
+                    }
+                    throw new MlServiceUnavailableException("The ML service closed the connection. Please try again.");
+                }
+                if (e instanceof ResourceAccessException) {    // connection refused or timeout
+                    throw new MlServiceUnavailableException("The ML service is not reachable right now");
+                }
+                // e.g. the response JSON didn't parse
+                throw new IllegalStateException("Unexpected response from the ML service: " + e.getMessage(), e);
+            }
         }
+    }
+
+    private static boolean connectionDropped(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SocketException && !(cause instanceof ConnectException)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // FastAPI errors look like {"detail":"..."}; show users that message rather than raw JSON.

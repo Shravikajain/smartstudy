@@ -3,7 +3,7 @@ import re
 from functools import lru_cache
 from typing import Callable
 
-from .background import BackgroundLoader, transformers_import_lock
+from .background import BackgroundLoader, transformers_lock
 from .schemas import DetectAiRequest, DetectAiResponse, PassageScore
 
 # Fakespot's 2025 RoBERTa detector (labels: Human / AI). It replaced Hello-SimpleAI's 2023
@@ -24,16 +24,16 @@ class AiModelUnavailableError(RuntimeError):
 @lru_cache(maxsize=1)
 def _get_classifier() -> Callable[..., list[dict[str, str | float]]]:
     try:
-        with transformers_import_lock:
+        with transformers_lock:
             from transformers import pipeline
 
-        return pipeline(
-            "text-classification",
-            model=HF_MODEL,
-            revision=HF_MODEL_REVISION,
-            device=-1,
-            token=False,
-        )
+            return pipeline(
+                "text-classification",
+                model=HF_MODEL,
+                revision=HF_MODEL_REVISION,
+                device=-1,
+                token=False,
+            )
     except (ImportError, OSError) as e:
         raise AiModelUnavailableError(
             "Could not load the local AI detector. Install the torch and transformers "

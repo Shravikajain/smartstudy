@@ -4,9 +4,12 @@ from typing import Callable
 
 logger = logging.getLogger(__name__)
 
-# Concurrent first imports from transformers' lazy module are not thread-safe ("cannot import
-# name 'AutoModel'"), so loaders hold this lock while importing it. Downloads still run in parallel.
-transformers_import_lock = threading.Lock()
+# Loaders hold this lock for the whole import-and-build of a transformers model. The lazy import is
+# not thread-safe ("cannot import name 'AutoModel'"), and from_pretrained briefly patches torch
+# globally so new weights start on the "meta" device: two models built at once leave each other's
+# weights there, and inference then fails with "Tensor on device meta". Whisper does not use
+# transformers, so it still loads in parallel.
+transformers_lock = threading.Lock()
 
 
 class BackgroundLoader:

@@ -72,6 +72,39 @@ def test_generation_shuffles_options_and_keeps_the_correct_answer(monkeypatch):
     assert len({q.correct_index for q in result}) > 1
 
 
+def test_explanation_option_references_follow_the_shuffle(monkeypatch):
+    # gpt-oss wrote "Option 0 states exactly this" although the options are shown as A-D after shuffling.
+    options = ["Ohm", "Volt", "Ampere", "Watt"]
+    question = _mcq("Unit of current?", options, 2)
+    question["explanation"] = "Option 2 is right. Option 0 measures resistance, option 3 power."
+    reply = json.dumps({"questions": [question]})
+    monkeypatch.setattr(llm_client, "_client", lambda: _fake_client(reply))
+    monkeypatch.setattr(llm_client.random, "shuffle", lambda order: order.reverse())   # [3, 2, 1, 0]
+
+    [result] = llm_client.generate_questions(
+        GenerateRequest(subject_name="Science", topic_name="Electricity", count=1))
+
+    assert result.options == ["Watt", "Ampere", "Volt", "Ohm"]
+    assert result.explanation == "Option B is right. Option D measures resistance, option A power."
+
+
+@pytest.mark.parametrize("explanation, expected", [
+    ("Choice (A) is correct; option D is a trap.", "Choice (D) is correct; option A is a trap."),
+    ("Option 1 is correct, not option 4.", "Option D is correct, not option A."),        # counts from 1
+    ("The other options are plausible.", "The other options are plausible."),
+    ("Option ascends here.", "Option ascends here."),                                   # not a reference
+])
+def test_option_references_are_relabelled(explanation, expected):
+    assert llm_client._relabel_option_references(explanation, [3, 2, 1, 0]) == expected
+
+
+def test_ambiguous_option_numbers_keep_the_original_order():
+    # "Option 1" and "Option 2" could count from 0 or 1, so the question is not shuffled.
+    question = llm_client.GeneratedQuestion(**{**_mcq("Unit of current?", ["Ohm", "Volt", "Ampere", "Watt"], 2),
+                                               "explanation": "Option 2 is right, not option 1."})
+    assert llm_client._shuffle_options(question) == question
+
+
 def test_generation_drops_duplicate_options_and_repeated_prompts(monkeypatch):
     reply = json.dumps({"questions": [
         _mcq("What is current?"),

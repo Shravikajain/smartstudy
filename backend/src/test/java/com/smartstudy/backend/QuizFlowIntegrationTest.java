@@ -50,6 +50,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -519,5 +520,36 @@ class QuizFlowIntegrationTest {
 
         mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registrationIsValidatedByTheServerToo() throws Exception {
+        assertRegistrationRejected("{\"email\":\"short@test.com\",\"password\":\"abc\",\"fullName\":\"Short\"}",
+                "Password must be at least 6 characters");
+        assertRegistrationRejected("{\"email\":\"notanemail\",\"password\":\"pass123\",\"fullName\":\"Bad\"}",
+                "Enter a valid email address");
+        assertRegistrationRejected("{\"email\":\"noname@test.com\",\"password\":\"pass123\",\"fullName\":\" \"}",
+                "Enter your name (up to 255 characters)");
+    }
+
+    @Test
+    void subjectAndTopicNamesMustNotBeBlank() throws Exception {
+        String auth = registerAndLogin("blank@test.com");
+        mockMvc.perform(post("/api/subjects").header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"  \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Enter a subject name (up to 255 characters)"));
+
+        Integer subjectId = JsonPath.read(postJson("/api/subjects", auth, "{\"name\":\"DAA\"}"), "$.id");
+        mockMvc.perform(post("/api/subjects/{id}/topics", subjectId).header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Enter a topic name (up to 255 characters)"));
+    }
+
+    private void assertRegistrationRejected(String body, String message) throws Exception {
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(message));
     }
 }

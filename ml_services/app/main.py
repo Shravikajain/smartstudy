@@ -2,7 +2,8 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from .ai_detector import AiModelUnavailableError, classifier_loader, detect_ai
@@ -50,6 +51,21 @@ def require_internal_key(x_internal_key: str | None = Header(default=None)):
 
 
 app = FastAPI(title="Smart Study ML Service", lifespan=lifespan)
+logger = logging.getLogger(__name__)
+
+
+# An unhandled exception makes uvicorn close the connection after its 500 response; the backend
+# then reuses that pooled connection for its next call (e.g. grading right after a failed
+# detection) and gets "Connection reset". Answering here keeps the connection usable.
+@app.middleware("http")
+async def unexpected_errors_as_json(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("Unhandled error in %s", request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "The ML service hit an unexpected error."})
+
+
 # Every endpoint except /health is for the backend only.
 internal = APIRouter(dependencies=[Depends(require_internal_key)])
 
