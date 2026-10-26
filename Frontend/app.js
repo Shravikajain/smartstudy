@@ -51,6 +51,45 @@
 
   const percent = (value) => `${Math.round(value * 100)}%`;
 
+  // "3 hours ago" in lists, with the full date kept in the tooltip.
+  function timeAgo(value) {
+    if (!value) return "–";
+    const date = new Date(value);
+    const minutes = Math.floor((Date.now() - date) / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const text = minutes < 1 ? "just now"
+      : minutes < 60 ? `${minutes} min ago`
+      : hours < 24 ? `${hours} ${hours === 1 ? "hour" : "hours"} ago`
+      : days < 2 ? "yesterday"
+      : days < 7 ? `${days} days ago`
+      : date.toLocaleDateString(undefined, { dateStyle: "medium" });
+    return `<time datetime="${date.toISOString()}" title="${esc(formatDate(value))}">${text}</time>`;
+  }
+
+  const crumbs = (href, parent, current) => `<nav class="crumbs" aria-label="Breadcrumb">
+      <a href="${href}">${esc(parent)}</a><span aria-hidden="true">›</span><span aria-current="page">${esc(current)}</span></nav>`;
+
+  // Display only: the email is the token's subject. The server still checks the token on every request.
+  function signedInEmail() {
+    try {
+      const payload = state.token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(atob(payload)).sub || "";
+    } catch {
+      return "";
+    }
+  }
+
+  // Shared by quizzes and interviews: "Question 2 of 5" plus a bar of the questions already answered.
+  function progress(number, total) {
+    const done = Math.round((number - 1) / total * 100);
+    return `<div class="progress">
+      <div class="progress-label"><span>Question ${number} of ${total}</span><span>${done}% complete</span></div>
+      <div class="progress-track" role="progressbar" aria-label="Questions answered" aria-valuemin="0"
+        aria-valuemax="${total}" aria-valuenow="${number - 1}"><span style="width:${Math.max(2, done)}%"></span></div>
+    </div>`;
+  }
+
   // One wording for AI-writing estimates across quiz feedback, test reviews and authenticity checks.
   // 60% matches the threshold the detector uses to flag text.
   function aiBand(probability) {
@@ -59,13 +98,15 @@
     return { tone: "low", label: "Likely human-written" };
   }
 
-  function aiMeter(probability, { title = "AI-WRITING CHECK", feedback = "", note = "" } = {}) {
+  function aiMeter(probability, { title = "AI-writing check", feedback = "", note = "" } = {}) {
     const band = aiBand(probability);
+    // The marks at 35% and 60% are the band boundaries used for the labels.
     return `<div class="ai-writing-result ai-${band.tone}">
       <span class="eyebrow">${title}</span>
       <div class="probability-row"><span class="ai-badge ai-badge-${band.tone}">${band.label}</span>
         <strong>${percent(probability)} AI probability</strong></div>
-      <div class="probability-track"><span style="width:${percent(probability)}"></span></div>
+      <div class="probability-track banded" role="img" aria-label="${percent(probability)} estimated AI probability">
+        <span style="width:${percent(probability)}"></span><i style="left:35%"></i><i style="left:60%"></i></div>
       ${feedback ? `<p>${esc(feedback)}</p>` : ""}
       ${note ? `<small>${esc(note)}</small>` : ""}
     </div>`;
@@ -115,45 +156,44 @@
     location.hash = "#/subjects";
   }
 
+  const brand = (href) => `<a class="brand" href="${href}" aria-label="Smart Study home">
+      <span class="brand-mark">${icon("book")}<i></i></span><span class="brand-name">Smart Study</span></a>`;
+
   function renderNav(active = "subjects") {
+    const link = (key, href, label) => `<a href="${href}" class="${active === key ? "active" : ""}"
+      ${active === key ? 'aria-current="page"' : ""}>${label}</a>`;
     $("nav").innerHTML = `
-      <a class="brand" href="#/subjects" aria-label="Smart Study dashboard">
-        <span class="brand-mark">${icon("book")}</span>
-        <span>smart<span class="brand-light">study</span></span>
-      </a>
-      <div class="nav-links">
-        <a class="${active === "subjects" ? "active" : ""}" href="#/subjects" title="My subjects">${icon("grid")} My subjects</a>
-        <a class="${active === "tests" ? "active" : ""}" href="#/tests" title="My tests">${icon("history")} My tests</a>
-        <a class="${active === "authenticity" ? "active" : ""}" href="#/authenticity" title="Authenticity check">${icon("scan")} Authenticity check</a>
-        <a class="${active === "interview" ? "active" : ""}" href="#/interview" title="AI Interview">${icon("sparkle")} AI Interview</a>
-      </div>
-      <button class="nav-profile" data-action="logout" aria-label="Log out" title="Log out">
-        <span class="avatar">S</span><span class="profile-label">Sign out</span>
-      </button>`;
+      ${brand("#/subjects")}
+      <nav class="nav-links" aria-label="Main">
+        ${link("subjects", "#/subjects", "My subjects")}
+        ${link("tests", "#/tests", "My tests")}
+        ${link("authenticity", "#/authenticity", "Authenticity check")}
+        ${link("interview", "#/interview", "AI Interview")}
+      </nav>
+      <div class="nav-account">
+        <span class="nav-email">${esc(signedInEmail())}</span>
+        <button class="nav-signout" data-action="logout">Sign out</button>
+      </div>`;
   }
 
   function renderAuth() {
-    $("nav").innerHTML = `<a class="brand" href="#/login"><span class="brand-mark">${icon("book")}</span>
-      <span>smart<span class="brand-light">study</span></span></a>`;
+    $("nav").innerHTML = brand("#/login");
     const isLogin = state.authMode === "login";
     $("view").innerHTML = `
       <section class="auth-layout">
-        <div class="auth-story">
-          <span class="eyebrow eyebrow-light">YOUR PERSONAL STUDY SPACE</span>
-          <h1>Study smarter.<br><span>Know what to expect.</span></h1>
-          <p>Turn previous exam papers into focused practice. Follow the topics, learn as you go,
-            and build confidence one question at a time.</p>
-          <div class="auth-points">
-            <span>${icon("upload")} Start with your papers</span>
-            <span>${icon("sparkle")} Find topics and make fresh questions</span>
-            <span>${icon("chart")} Practice at your own level</span>
-          </div>
-          <div class="auth-decoration" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="auth-intro">
+          <h1>Practise with your own past papers.</h1>
+          <p>Smart Study reads your previous exam papers, groups their questions by topic and builds tests
+            that adjust to how you answer.</p>
+          <ul class="auth-points">
+            <li><strong>Upload papers</strong><span>Typed or scanned PDFs, up to five at a time.</span></li>
+            <li><strong>Practise by topic</strong><span>Multiple-choice and written questions, with feedback.</span></li>
+            <li><strong>Review every test</strong><span>Answers, grades and model answers stay in your history.</span></li>
+          </ul>
         </div>
         <div class="auth-panel">
-          <span class="eyebrow">${isLogin ? "WELCOME BACK" : "GET STARTED"}</span>
-          <h2>${isLogin ? "Sign in to continue" : "Create your account"}</h2>
-          <p class="muted">${isLogin ? "Your next focused study session starts here." : "Set up your study space in a few seconds."}</p>
+          <h2>${isLogin ? "Sign in" : "Create your account"}</h2>
+          <p class="muted">${isLogin ? "Welcome back. Pick up where you left off." : "It takes less than a minute."}</p>
           ${isLogin ? `
             <form data-form="login" class="auth-form">
               <label>Email address<input name="email" type="email" placeholder="you@example.com" autocomplete="email" required></label>
@@ -176,40 +216,40 @@
   async function renderSubjects() {
     renderNav("subjects");
     const subjects = await api("/subjects");
-    const subjectCards = subjects.map((subject, index) => `
-      <a class="subject-card" href="#/subjects/${subject.id}">
-        <span class="subject-icon subject-icon-${index % 4}">${icon("book")}</span>
-        <span class="subject-card-copy"><strong>${esc(subject.name)}</strong>
-          <small>Open your study workspace</small></span>
-        <span class="subject-arrow">${icon("arrow")}</span>
-      </a>`).join("");
+    const subjectRows = subjects.map((subject) => `
+      <li><a class="subject-card" href="#/subjects/${subject.id}">
+        <span class="subject-initial" aria-hidden="true">${esc(subject.name.trim().charAt(0).toUpperCase() || "?")}</span>
+        <span class="subject-name">${esc(subject.name)}</span>
+        <span class="row-go">Open ${icon("arrow")}</span>
+      </a></li>`).join("");
 
     $("view").innerHTML = `
-      <section class="welcome-row">
-        <div><span class="eyebrow">YOUR STUDY DASHBOARD</span>
-          <h1>Make every paper <span class="text-accent">count.</span></h1>
-          <p class="lead">Bring your past papers. We’ll find the patterns and turn them into practice.</p>
-        </div>
-        <div class="welcome-art" aria-hidden="true"><div class="art-orbit"></div><span>◎</span><i>✳</i></div>
-      </section>
-      <section class="dashboard-stats" aria-label="How Smart Study works">
-        <div class="stat-card"><span class="stat-icon stat-blue">${icon("upload")}</span><span><strong>Upload</strong><small>Past papers, PDF</small></span><b>01</b></div>
-        <div class="stat-card"><span class="stat-icon stat-violet">${icon("chart")}</span><span><strong>Discover</strong><small>Topics found for you</small></span><b>02</b></div>
-        <div class="stat-card"><span class="stat-icon stat-green">${icon("sparkle")}</span><span><strong>Practice</strong><small>Adaptive questions</small></span><b>03</b></div>
-      </section>
-      <section class="section-heading">
-        <div><span class="eyebrow">YOUR WORKSPACES</span><h2>Subjects</h2></div>
-        <span class="count-pill">${subjects.length} ${subjects.length === 1 ? "subject" : "subjects"}</span>
-      </section>
-      <section class="subject-grid">
-        ${subjectCards || `<div class="empty-card"><span class="empty-icon">${icon("book")}</span>
-          <h3>Your first subject starts here</h3><p>Create a subject, then upload a previous paper to build a practice set.</p></div>`}
-        <form class="subject-create" data-form="subject">
-          <label for="subject-name">${icon("sparkle")} Add a subject</label>
-          <div class="create-row"><input id="subject-name" name="name" placeholder="e.g. Data Structures" required>
-            <button class="button button-dark" aria-label="Add subject">${icon("arrow")}</button></div>
-        </form>
-      </section>
+      <header class="page-head">
+        <div><h1>My subjects</h1>
+          <p class="page-desc">Open a subject to upload past papers, generate questions and take tests.</p></div>
+      </header>
+      <div class="dashboard">
+        <section class="panel card subjects-panel" aria-labelledby="subjects-title">
+          <div class="card-head"><div><h2 class="panel-title" id="subjects-title">Subjects</h2>
+            <p class="muted">${subjects.length} ${subjects.length === 1 ? "subject" : "subjects"}</p></div></div>
+          ${subjectRows ? `<ul class="row-list subject-list">${subjectRows}</ul>` : `<div class="empty">
+            <h3>No subjects yet</h3>
+            <p>Add the course you are revising for, then upload its past papers to build a practice set.</p></div>`}
+          <form class="subject-create card-foot" data-form="subject">
+            <label for="subject-name">Add a subject</label>
+            <div class="create-row"><input id="subject-name" name="name" placeholder="e.g. Data Structures" required>
+              <button class="button button-primary">Add subject</button></div>
+          </form>
+        </section>
+        <aside class="tools" aria-label="Other tools">
+          <a class="tool" href="#/tests">${icon("history")}<span><strong>My tests</strong>
+            <small>Review answers, grades and feedback from earlier tests.</small></span></a>
+          <a class="tool" href="#/authenticity">${icon("scan")}<span><strong>Authenticity check</strong>
+            <small>Estimate whether parts of a text were written by AI.</small></span></a>
+          <a class="tool" href="#/interview">${icon("microphone")}<span><strong>AI Interview</strong>
+            <small>Practise answering questions on a subject or role, by typing or speaking.</small></span></a>
+        </aside>
+      </div>
       <p class="privacy-note">${icon("shield")} Your papers are used to prepare your study set for your account.</p>`;
   }
 
@@ -218,13 +258,13 @@
     renderNav("interview");
     const subjects = await api("/subjects");
     $("view").innerHTML = `
-      <a class="back-link" href="#/subjects">${icon("back")} Dashboard</a>
-      <section class="subject-hero"><div><span class="eyebrow">VOICE-ENABLED PRACTICE</span>
-        <h1>Practice an interview</h1>
-        <p class="lead">Choose a subject or engineering role. The interviewer adapts follow-ups to your answers.</p>
-      </div><div class="subject-hero-mark">${icon("sparkle")}</div></section>
-      <section class="panel interview-setup">
-        <span class="eyebrow">SET UP YOUR SESSION</span>
+      <header class="page-head">
+        <div><h1>AI Interview</h1>
+          <p class="page-desc">Practise answering questions on a subject or an engineering role. Follow-up questions
+            depend on your answers, and you can type or speak.</p></div>
+      </header>
+      <section class="panel interview-setup" aria-labelledby="interview-setup-title">
+        <h2 class="panel-title" id="interview-setup-title">Set up your session</h2>
         <form data-form="startInterview" class="interview-setup-form">
           <label>Interview focus
             <select name="targetType" id="interview-target-type">
@@ -250,13 +290,13 @@
           <label>Number of questions
             <input name="questionCount" type="number" min="1" max="20" value="5" required>
           </label>
-          <p class="interview-privacy">Voice recordings are transcribed by the local Smart Study service and are not sent to an external speech provider.
-            Your answer text is sent to the configured AI service for feedback. You can type your answer instead.</p>
+          <p class="interview-privacy">${icon("shield")}<span>Voice recordings are transcribed by the local Smart Study service and are not sent to an external speech provider.
+            Your answer text is sent to the configured AI service for feedback. You can type your answer instead.</span></p>
           <button class="button button-primary" data-busy="Preparing your interview…">
             Start interview ${icon("arrow")}
           </button>
         </form>
-        ${subjects.length ? "" : `<p class="muted">Create a subject first, or select an engineering role above.</p>`}
+        ${subjects.length ? "" : `<p class="muted">You have no subjects yet. Choose “Engineering role” above, or add a subject first.</p>`}
       </section>`;
     const subjectField = $("interview-subject-field");
     subjectField.hidden = !subjects.length;
@@ -283,24 +323,22 @@
         <p>${esc(turn.content)}</p>
       </article>`).join("");
     $("view").innerHTML = `
-      <div class="interview-topline">
-        <div><span class="eyebrow">LIVE PRACTICE SESSION</span>
+      <header class="page-head interview-topline">
+        <div><p class="page-kicker">Interview practice</p>
           <h1>${esc(interview.target)}</h1>
-          <p class="muted">${interview.level[0].toUpperCase() + interview.level.slice(1)} level · ${esc(interview.targetType === "subject" ? "Subject interview" : "Engineering-role interview")}</p>
+          <p class="page-desc">${interview.level[0].toUpperCase() + interview.level.slice(1)} level · ${esc(interview.targetType === "subject" ? "Subject interview" : "Engineering-role interview")}</p>
         </div>
-        <button class="text-button" data-action="endInterview">End interview</button>
-      </div>
-      <div class="quiz-progress-label"><span>Question ${interview.questionNumber} of ${interview.questionCount}</span>
-        <span>${Math.round((interview.questionNumber - 1) / interview.questionCount * 100)}% complete</span></div>
-      <div class="progress-track"><span style="width:${Math.max(6, (interview.questionNumber - 1) / interview.questionCount * 100)}%"></span></div>
+        <button class="button button-secondary" data-action="endInterview">End interview</button>
+      </header>
+      ${progress(interview.questionNumber, interview.questionCount)}
       <section class="interview-live">
         <div class="interviewer-question">
-          <span class="eyebrow">YOUR QUESTION</span>
+          <span class="eyebrow">Question ${interview.questionNumber}</span>
           <p>${esc(interview.currentQuestion)}</p>
-          <button class="button button-secondary" data-action="speakQuestion">${icon("sparkle")} Read question aloud</button>
+          <button class="button button-quiet" data-action="speakQuestion">${icon("sparkle")} Read question aloud</button>
         </div>
         ${interview.lastFeedback ? `<div class="interview-feedback">
-          <span class="eyebrow">FEEDBACK ON YOUR LAST ANSWER · ${Math.round(interview.lastScore * 100)}%</span>
+          <span class="eyebrow">Feedback on your last answer <span class="score-chip">${Math.round(interview.lastScore * 100)}%</span></span>
           <p>${esc(interview.lastFeedback)}</p></div>` : ""}
         <form data-form="submitInterviewAnswer" class="interview-answer-form">
           <label for="interview-answer">Your answer</label>
@@ -334,11 +372,10 @@
       : 0;
     $("view").innerHTML = `
       <section class="summary-card interview-summary">
-        <span class="summary-icon">${icon("chart")}</span>
-        <span class="eyebrow eyebrow-green">INTERVIEW COMPLETE</span>
-        <h2>Session review</h2>
-        <p>${esc(result.feedback)}</p>
+        <p class="page-kicker">Interview complete · ${esc(interview.target)}</p>
+        <h1>Session review</h1>
         <div class="summary-score"><strong>${average}%</strong><span>average answer score</span></div>
+        <p>${esc(result.feedback)}</p>
         <p class="muted">Scores reflect estimated technical content only—not accent, grammar, or speaking speed.</p>
         <details class="interview-transcript" open>
           <summary>Review transcript (${interview.history.length} turns)</summary>
@@ -359,33 +396,27 @@
     ]);
     state.generated = null;
     state.quiz = null;
+    const saved = bank.multipleChoice + bank.subjective;
     $("view").innerHTML = `
-      <a class="back-link" href="#/subjects">${icon("back")} All subjects</a>
-      <section class="subject-hero">
-        <div><span class="eyebrow">STUDY WORKSPACE</span><h1>${esc(subject.name)}</h1>
-          <p class="lead">One upload starts the whole pipeline. Your topic map and practice set are created together.</p>
+      ${crumbs("#/subjects", "My subjects", subject.name)}
+      <header class="page-head">
+        <div><h1>${esc(subject.name)}</h1>
+          <p class="page-desc">${papers.length} ${papers.length === 1 ? "paper" : "papers"} uploaded ·
+            ${saved} ${saved === 1 ? "question" : "questions"} saved</p>
         </div>
-        <div class="subject-hero-mark">${icon("book")}</div>
-      </section>
-      <section class="pipeline" aria-label="Study pipeline">
-        <div class="pipeline-step"><span>1</span><div><strong>Upload papers</strong><small>PDF past exams</small></div></div>
-        <i class="pipeline-line"></i>
-        <div class="pipeline-step"><span>2</span><div><strong>Find topics</strong><small>Patterns from papers</small></div></div>
-        <i class="pipeline-line"></i>
-        <div class="pipeline-step"><span>3</span><div><strong>Practice adaptively</strong><small>Difficulty adjusts to you</small></div></div>
-      </section>
-      <section class="workspace-grid">
-        <div class="panel upload-panel">
-          <div class="panel-heading"><span class="panel-icon">${icon("upload")}</span>
-            <div><span class="eyebrow">START YOUR PIPELINE</span><h2>Build a practice set</h2></div>
-          </div>
-          <p class="muted">Choose 1–5 previous exam papers and how many new questions you want.</p>
+      </header>
+      <div class="subject-layout">
+      <div class="subject-main">
+      ${practicePanel(id, bank)}
+        <section class="panel upload-panel" aria-labelledby="build-title">
+          <h2 class="panel-title" id="build-title">${saved ? "Add papers and generate more questions" : "Build a practice set"}</h2>
+          <p class="panel-desc">Choose 1–5 previous exam papers and how many new questions you want.</p>
           <form data-form="generateFromPapers" data-subject="${id}" class="generation-form">
             <label class="dropzone" for="paper-files">
               <input id="paper-files" type="file" name="files" accept="application/pdf,.pdf" multiple required>
               <span class="dropzone-icon">${icon("upload")}</span>
               <strong>Choose your past papers</strong>
-              <span class="dropzone-copy">Click to browse · PDF files · 1 to 5 papers</span>
+              <span class="dropzone-copy">PDF files · 1 to 5 papers · scanned pages are read with OCR</span>
               <span id="file-names" class="file-names">No files selected</span>
             </label>
             <div class="form-bottom">
@@ -405,35 +436,35 @@
               </button>
             </div>
             <div class="pipeline-progress" id="pipeline-progress" hidden aria-live="polite">
-              <span class="spinner"></span><span><strong>Pipeline in progress</strong>
+              <span class="spinner"></span><span><strong>Preparing your questions</strong>
                 <small>Reading papers (including OCR for scans), finding topics and preparing your questions. Large scans can take several minutes; keep this page open.</small></span>
             </div>
           </form>
-        </div>
-        <aside class="side-panel">
-          <span class="side-panel-icon">${icon("chart")}</span><span class="eyebrow">WHAT HAPPENS NEXT</span>
-          <h3>From old papers to fresh practice</h3>
-          <ul class="process-list">
-            <li><span>01</span><div><strong>Read</strong><small>Text is extracted; scanned pages use OCR.</small></div></li>
-            <li><span>02</span><div><strong>Understand</strong><small>Recurring topics and exam patterns are identified.</small></div></li>
-            <li><span>03</span><div><strong>Create</strong><small>New questions are generated across those topics.</small></div></li>
-          </ul>
-          <p class="side-note">Scanned pages are read with OCR. Clear, upright scans work best. Review your questions before starting a quiz.</p>
-        </aside>
-      </section>
-      ${practicePanel(id, bank)}
-      <section id="generated-section" class="generated-section" hidden></section>
-      <section id="quiz-section" class="quiz-section" hidden></section>
-      <section class="papers-section">
-        <div class="section-heading"><div><span class="eyebrow">YOUR SOURCE MATERIAL</span><h2>Uploaded papers</h2></div>
-          <span class="count-pill">${papers.length} ${papers.length === 1 ? "paper" : "papers"}</span></div>
-        <div class="paper-list">${papers.map((paper) => `
-          <div class="paper-row"><span class="paper-icon">PDF</span>
-            <span class="paper-name"><strong>${esc(paper.originalFilename)}</strong>
-              <small>${paper.textLength.toLocaleString()} characters extracted</small></span>
-            <span class="paper-date">${paper.examYear ? esc(paper.examYear) : "Past paper"}</span></div>`).join("")
-          || `<p class="empty-papers">Your uploaded papers will show here.</p>`}</div>
-      </section>`;
+        </section>
+        <section id="generated-section" class="generated-section" hidden></section>
+        <section id="quiz-section" class="quiz-section" hidden></section>
+      </div>
+      <aside class="subject-aside">
+        <section class="panel card papers-section" aria-labelledby="papers-title">
+          <div class="card-head"><h2 class="panel-title" id="papers-title">Uploaded papers <span class="count">${papers.length}</span></h2></div>
+          ${papers.length ? `<ul class="row-list paper-list">${papers.map((paper) => `
+            <li class="paper-row"><span class="paper-icon" aria-hidden="true">PDF</span>
+              <span class="paper-name"><strong>${esc(paper.originalFilename)}</strong>
+                <small>${paper.textLength.toLocaleString()} characters extracted${paper.examYear ? ` · ${esc(paper.examYear)}` : ""}</small></span>
+            </li>`).join("")}</ul>`
+            : `<p class="empty-papers">Papers you upload for this subject will be listed here.</p>`}
+        </section>
+        <section class="help-note" aria-labelledby="help-title">
+          <h2 id="help-title">How question generation works</h2>
+          <ol class="process-list">
+            <li><strong>Read.</strong> Text is extracted; scanned pages use OCR.</li>
+            <li><strong>Understand.</strong> Recurring topics and exam patterns are identified.</li>
+            <li><strong>Create.</strong> New questions are generated across those topics.</li>
+          </ol>
+          <p>Clear, upright scans work best. Review your questions before starting a quiz.</p>
+        </section>
+      </aside>
+      </div>`;
   }
 
   function practicePanel(subjectId, bank) {
@@ -445,11 +476,10 @@
     const options = Object.entries(counts).map(([value, count]) => `
       <option value="${value}" ${count ? "" : "disabled"} ${value === preferred ? "selected" : ""}>
         ${QUESTION_MODES[value]} (${count})</option>`).join("");
-    return `<section class="panel practice-panel">
-      <div class="panel-heading"><span class="panel-icon">${icon("chart")}</span>
-        <div><span class="eyebrow">PRACTICE ANYTIME</span><h2>Take a test from your question bank</h2></div></div>
-      <p class="muted">${bank.multipleChoice} multiple-choice and ${bank.subjective} subjective questions are saved
-        for this subject. Choose what to practise; every test is saved in My tests for later review.</p>
+    return `<section class="panel practice-panel" aria-labelledby="practice-title">
+      <h2 class="panel-title" id="practice-title">Take a test from your question bank</h2>
+      <p class="panel-desc">${bank.multipleChoice} multiple-choice and ${bank.subjective} subjective questions are saved
+        for this subject. Each question adapts to your previous answers, and every test is saved in My tests.</p>
       <form data-form="practiceBank" data-subject="${subjectId}" class="practice-form">
         <label class="format-input">Question type<select name="questionType">${options}</select></label>
         <label class="count-input"><span>Questions</span>
@@ -465,23 +495,21 @@
     const section = $("generated-section");
     section.hidden = false;
     section.innerHTML = `
-      <div class="section-heading generated-heading"><div><span class="eyebrow eyebrow-green">YOUR STUDY SET IS READY</span>
-        <h2>${result.questions.length} questions, made for this subject</h2></div>
-        <span class="ready-badge">${icon("check")} Ready to practice</span></div>
-      <div class="topic-tags"><strong>Topics identified</strong>
-        ${result.topics.map((topic) => `<span class="topic-tag">${esc(topic)}</span>`).join("")}</div>
-      <div class="question-preview-list">${result.questions.map((question, index) => `
-        <article class="question-preview"><span class="question-number">${String(index + 1).padStart(2, "0")}</span>
-          <div class="question-preview-body"><div class="question-meta"><span>${esc(question.topic)}</span>
-            <span>${question.questionType === "SUBJECTIVE" ? "Subjective" : "Multiple choice"}</span></div>
-            <h3>${esc(question.prompt)}</h3>
-            ${question.questionType === "SUBJECTIVE" ? "" : `
-              <ol type="A">${question.options.map((option) => `<li>${esc(option)}</li>`).join("")}</ol>`}</div>
-        </article>`).join("")}</div>
-      <div class="start-quiz-row"><p>${icon("chart")} Your quiz will adjust question difficulty as you answer.</p>
+      <div class="generated-heading">
+        <h2 class="panel-title">${result.questions.length} new ${result.questions.length === 1 ? "question" : "questions"}</h2>
         <button class="button button-primary" data-action="startGeneratedQuiz" data-subject="${esc(location.hash.match(/\d+/)?.[0] || "")}">
           Start adaptive practice ${icon("arrow")}
-        </button></div>`;
+        </button>
+      </div>
+      <p class="topic-line"><strong>Topics found in your papers:</strong> ${result.topics.map(esc).join(" · ")}</p>
+      <ol class="question-preview-list">${result.questions.map((question) => `
+        <li class="question-preview">
+          <p class="question-meta">${esc(question.topic)} · ${question.questionType === "SUBJECTIVE" ? "Subjective" : "Multiple choice"}</p>
+          <h3>${esc(question.prompt)}</h3>
+          ${question.questionType === "SUBJECTIVE" ? "" : `
+            <ol class="option-preview" type="A">${question.options.map((option) => `<li>${esc(option)}</li>`).join("")}</ol>`}
+        </li>`).join("")}</ol>
+      <p class="muted start-note">These questions are saved to this subject. Difficulty adjusts as you answer.</p>`;
     section.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -490,13 +518,10 @@
     quizSection.hidden = false;
     const subjective = question.questionType === "SUBJECTIVE";
     quizSection.innerHTML = `
-      <div class="quiz-topline"><div><span class="eyebrow">ADAPTIVE PRACTICE</span>
-        <h2>Your quiz</h2></div><button class="text-button" data-action="backToQuestions">Exit quiz</button></div>
-      <div class="quiz-progress-label"><span>Question ${question.questionNumber} of ${question.totalQuestions}</span>
-        <span>${Math.round((question.questionNumber - 1) / question.totalQuestions * 100)}% complete</span></div>
-      <div class="progress-track"><span style="width:${Math.max(6, (question.questionNumber - 1) / question.totalQuestions * 100)}%"></span></div>
-      <article class="quiz-card"><div class="question-meta"><span>Question ${String(question.questionNumber).padStart(2, "0")}</span>
-        <span>${icon("sparkle")} Adaptive difficulty</span></div>
+      <div class="quiz-topline"><h2 class="panel-title">Your quiz</h2>
+        <button class="button button-quiet" data-action="backToQuestions">Exit quiz</button></div>
+      ${progress(question.questionNumber, question.totalQuestions)}
+      <article class="quiz-card"><p class="question-meta">${subjective ? "Subjective" : "Multiple choice"} · difficulty adapts to your answers</p>
         <h3>${esc(question.prompt)}</h3>
         ${subjective ? `
           <form class="subjective-answer-form" data-form="subjectiveAnswer">
@@ -551,7 +576,7 @@
         note: "This estimate is not proof of authorship and does not affect your answer grade or quiz difficulty.",
       }) : subjective ? `<p class="ai-unavailable">${icon("scan")} The AI-writing check was unavailable for this answer,
         so only the grade was recorded. Try again in a few minutes if the service is still starting.</p>` : ""}
-      <div class="quiz-result-footer"><div><span class="eyebrow">YOUR PROGRESS</span>
+      <div class="quiz-result-footer"><div><span class="eyebrow">Your progress</span>
         <strong>${result.correctCount} <small>correct</small> / ${result.answeredCount} <small>answered</small></strong>
         <span class="ability-label">Ability estimate ${result.abilityEstimate.toFixed(2)}</span></div>
         ${result.finished
@@ -566,13 +591,12 @@
   function showQuizSummary() {
     const summary = state.quiz.summary;
     $("quiz-section").innerHTML = `
-      <div class="summary-card"><span class="summary-icon">${icon("chart")}</span>
-        <span class="eyebrow eyebrow-green">PRACTICE COMPLETE</span>
-        <h2>Nice work. You showed up.</h2>
-        <p>You answered <strong>${summary.answeredCount}</strong> questions and got
-          <strong>${summary.correctCount}</strong> right.</p>
+      <div class="summary-card">
+        <h2>Test complete</h2>
         <div class="summary-score"><strong>${Math.round(summary.correctCount / summary.answeredCount * 100)}%</strong>
           <span>correct answers</span></div>
+        <p>You answered <strong>${summary.answeredCount}</strong> questions and got
+          <strong>${summary.correctCount}</strong> right.</p>
         <p class="muted">This test is saved in My tests, with your answers, grades and feedback.</p>
         <div class="summary-actions">
           <a class="button button-primary" href="#/tests/${state.quiz.sessionId}">${icon("history")} Review your answers</a>
@@ -592,24 +616,26 @@
     renderNav("tests");
     const tests = await api("/quizzes");
     $("view").innerHTML = `
-      <section class="subject-hero"><div><span class="eyebrow">SELF-EVALUATION</span>
-        <h1>My tests</h1>
-        <p class="lead">Every test you take is saved here with your answers, grades and feedback, so you can see what to revise.</p>
-      </div><div class="subject-hero-mark">${icon("history")}</div></section>
-      <section class="test-list">${tests.map((test) => `
-        <a class="test-row" href="#/tests/${test.sessionId}">
-          <span class="test-score">${test.answeredCount ? percent(test.correctCount / test.answeredCount) : "–"}</span>
+      <header class="page-head">
+        <div><h1>My tests</h1>
+          <p class="page-desc">Every test you take is saved here with your answers, grades and feedback, so you can see what to revise.</p></div>
+      </header>
+      ${tests.length ? `<section class="panel card test-table" aria-labelledby="tests-title">
+        <div class="card-head"><div><h2 class="panel-title" id="tests-title">Tests</h2><p class="muted">Newest first</p></div></div>
+        <div class="table-head" aria-hidden="true"><span>Test</span><span>Status</span><span>Score</span><span>When</span></div>
+        <ul class="row-list test-list">${tests.map((test) => `
+        <li><a class="test-row" href="#/tests/${test.sessionId}">
           <span class="test-copy"><strong>${esc(test.subjectName)}</strong>
-            <small>${formatDate(test.startedAt)} · ${esc(QUESTION_MODES[test.questionMode] || "Practice")}
-              · ${esc(testScore(test))}</small></span>
+            <small>${esc(QUESTION_MODES[test.questionMode] || "Practice")} · ${esc(testScore(test))}</small></span>
           <span class="test-tags">
-            ${test.status === "COMPLETED" ? "" : `<span class="tag tag-muted">Not finished</span>`}
-            ${test.aiFlaggedCount ? `<span class="tag tag-warn">${test.aiFlaggedCount} flagged as likely AI-written</span>` : ""}
+            ${test.status === "COMPLETED" ? `<span class="tag tag-good">Completed</span>` : `<span class="tag tag-warn">Not finished</span>`}
+            ${test.aiFlaggedCount ? `<span class="tag tag-bad">${test.aiFlaggedCount} flagged as likely AI-written</span>` : ""}
           </span>
-          <span class="subject-arrow">${icon("arrow")}</span>
-        </a>`).join("") || `<div class="empty-card"><span class="empty-icon">${icon("history")}</span>
-          <h3>No tests yet</h3><p>Open a subject and start a test. It will appear here when you answer your first question.</p></div>`}
-      </section>`;
+          <span class="test-score">${test.answeredCount ? percent(test.correctCount / test.answeredCount) : "–"}</span>
+          <span class="test-when">${timeAgo(test.startedAt)}</span>
+        </a></li>`).join("")}</ul></section>` : `<div class="empty panel">
+          <h3>No tests yet</h3><p>Open a subject and start a test. It will appear here when you answer your first question.</p>
+          <a class="button button-secondary" href="#/subjects">Go to my subjects</a></div>`}`;
   }
 
   function reviewAnswer(answer) {
@@ -618,9 +644,9 @@
       ? `<span class="tag ${answer.correct ? "tag-good" : "tag-warn"}">Score ${answer.score != null ? percent(answer.score) : "–"}</span>`
       : `<span class="tag ${answer.correct ? "tag-good" : "tag-bad"}">${answer.correct ? "Correct" : "Incorrect"}</span>`;
     const body = subjective ? `
-      <div class="review-block"><span class="eyebrow">YOUR ANSWER</span>
+      <div class="review-block"><span class="eyebrow">Your answer</span>
         <p class="written-answer">${esc(answer.answerText || "No answer text was saved for this older test.")}</p></div>
-      ${answer.feedback ? `<div class="review-block"><span class="eyebrow">FEEDBACK</span><p>${esc(answer.feedback)}</p></div>` : ""}
+      ${answer.feedback ? `<div class="review-block"><span class="eyebrow">Feedback</span><p>${esc(answer.feedback)}</p></div>` : ""}
       ${answer.aiProbability != null ? aiMeter(answer.aiProbability)
         : `<p class="ai-unavailable">${icon("scan")} No AI-writing check was recorded for this answer.</p>`}
       <details class="review-details"><summary>Model answer and marking guide</summary>
@@ -634,10 +660,9 @@
           : index === answer.selectedIndex ? " (your answer)" : "";
         return `<li class="${mark}">${esc(option)}<span class="option-note">${note}</span></li>`;
       }).join("")}</ol>
-      ${answer.explanation ? `<div class="review-block"><span class="eyebrow">EXPLANATION</span><p>${esc(answer.explanation)}</p></div>` : ""}`;
+      ${answer.explanation ? `<div class="review-block"><span class="eyebrow">Explanation</span><p>${esc(answer.explanation)}</p></div>` : ""}`;
     return `<article class="review-card">
-      <div class="question-meta"><span>Question ${String(answer.number).padStart(2, "0")} · ${esc(answer.topic)}</span>
-        <span>${subjective ? "Subjective" : "Multiple choice"}</span></div>
+      <p class="question-meta">Question ${answer.number} · ${esc(answer.topic)} · ${subjective ? "Subjective" : "Multiple choice"}</p>
       <div class="review-heading"><h3>${esc(answer.prompt)}</h3>${result}</div>
       ${body}
     </article>`;
@@ -648,27 +673,24 @@
     const { summary, answers } = await api(`/quizzes/${id}`);
     const written = answers.filter((answer) => answer.questionType === "SUBJECTIVE");
     $("view").innerHTML = `
-      <a class="back-link" href="#/tests">${icon("back")} All tests</a>
-      <section class="subject-hero"><div><span class="eyebrow">TEST REVIEW</span>
-        <h1>${esc(summary.subjectName)}</h1>
-        <p class="lead">${formatDate(summary.startedAt)} · ${esc(QUESTION_MODES[summary.questionMode] || "Practice")}
-          ${summary.status === "COMPLETED" ? "" : " · Not finished"}</p>
-      </div><div class="subject-hero-mark">${icon("chart")}</div></section>
-      <section class="dashboard-stats review-stats">
-        <div class="stat-card"><span class="stat-icon stat-green">${icon("check")}</span>
-          <span><strong>${summary.correctCount} / ${summary.answeredCount}</strong><small>answers correct</small></span></div>
-        <div class="stat-card"><span class="stat-icon stat-violet">${icon("book")}</span>
-          <span><strong>${summary.averageWrittenScore != null ? percent(summary.averageWrittenScore) : "–"}</strong>
-            <small>average written score (${written.length} answers)</small></span></div>
-        <div class="stat-card"><span class="stat-icon stat-blue">${icon("scan")}</span>
-          <span><strong>${summary.aiFlaggedCount}</strong><small>answers flagged as likely AI-written</small></span></div>
-      </section>
+      ${crumbs("#/tests", "My tests", "Test review")}
+      <header class="page-head">
+        <div><h1>${esc(summary.subjectName)}</h1>
+          <p class="page-desc">${formatDate(summary.startedAt)} · ${esc(QUESTION_MODES[summary.questionMode] || "Practice")}
+            ${summary.status === "COMPLETED" ? "" : " · Not finished"}</p></div>
+      </header>
+      <dl class="summary-strip">
+        <div><dt>Answers correct</dt><dd>${summary.correctCount} / ${summary.answeredCount}</dd></div>
+        <div><dt>Average written score (${written.length} ${written.length === 1 ? "answer" : "answers"})</dt>
+          <dd>${summary.averageWrittenScore != null ? percent(summary.averageWrittenScore) : "–"}</dd></div>
+        <div><dt>Flagged as likely AI-written</dt><dd>${summary.aiFlaggedCount}</dd></div>
+      </dl>
       <section class="review-list">${answers.map(reviewAnswer).join("")}</section>`;
   }
 
   function authenticityResult(result) {
     const flaggedPassages = result.passages.length > 1 ? `
-      <div class="passage-list"><span class="eyebrow">SECTION BY SECTION</span>
+      <div class="passage-list"><h3 class="eyebrow">Section by section</h3>
         ${result.passages.map((passage, index) => {
           const band = aiBand(passage.aiProbability);
           return `<div class="passage-row ai-${band.tone}">
@@ -677,37 +699,37 @@
             <div class="probability-track"><span style="width:${percent(passage.aiProbability)}"></span></div>
             <p>${esc(passage.excerpt)}</p></div>`;
         }).join("")}</div>` : "";
-    return `<section class="panel authenticity-result">
-      <div class="panel-heading"><span class="panel-icon">${icon("scan")}</span>
-        <div><span class="eyebrow">RESULT</span><h2>${esc(result.sourceName)}</h2></div></div>
-      <p class="muted">${result.characterCount.toLocaleString()} characters checked
+    return `<section class="panel authenticity-result" aria-labelledby="result-title">
+      <p class="page-kicker">Result</p>
+      <h2 class="panel-title" id="result-title">${esc(result.sourceName)}</h2>
+      <p class="panel-desc">${result.characterCount.toLocaleString()} characters checked
         ${result.passageCount > 1 ? ` in ${result.passageCount} sections, ${result.flaggedPassageCount} flagged` : ""}.</p>
-      ${aiMeter(result.aiProbability, { title: "OVERALL ESTIMATE", feedback: result.feedback })}
+      ${aiMeter(result.aiProbability, { title: "Overall estimate", feedback: result.feedback })}
       ${flaggedPassages}
     </section>`;
   }
 
   function recentChecks(checks) {
     if (!checks.length) return `<p class="empty-papers">Your checks will be listed here.</p>`;
-    return checks.map((check) => {
+    return `<ul class="row-list">${checks.map((check) => {
       const band = aiBand(check.aiProbability);
-      return `<div class="paper-row"><span class="paper-icon">${icon("scan")}</span>
+      return `<li class="paper-row">
         <span class="paper-name"><strong>${esc(check.sourceName)}</strong>
-          <small>${formatDate(check.createdAt)} · ${check.characterCount.toLocaleString()} characters
+          <small>${timeAgo(check.createdAt)} · ${check.characterCount.toLocaleString()} characters
             ${check.passageCount > 1 ? ` · ${check.flaggedPassageCount}/${check.passageCount} sections flagged` : ""}</small></span>
-        <span class="ai-badge ai-badge-${band.tone}">${band.label} · ${percent(check.aiProbability)}</span></div>`;
-    }).join("");
+        <span class="ai-badge ai-badge-${band.tone}">${band.label} · ${percent(check.aiProbability)}</span></li>`;
+    }).join("")}</ul>`;
   }
 
   async function renderAuthenticity() {
     renderNav("authenticity");
     const checks = await api("/authenticity/checks");
     $("view").innerHTML = `
-      <section class="subject-hero"><div><span class="eyebrow">CONTENT AUTHENTICITY</span>
-        <h1>Check your material</h1>
-        <p class="lead">Upload notes, an essay or an assignment to estimate how likely it is that parts were written by AI.</p>
-      </div><div class="subject-hero-mark">${icon("scan")}</div></section>
-      <section class="panel authenticity-panel">
+      <header class="page-head">
+        <div><h1>Authenticity check</h1>
+          <p class="page-desc">Paste or upload notes, an essay or an assignment to estimate how likely it is that parts were written by AI.</p></div>
+      </header>
+      <section class="panel authenticity-panel" aria-label="Check your material">
         <form data-form="authenticity" class="authenticity-form">
           <label for="authenticity-text">Paste your text</label>
           <textarea id="authenticity-text" name="text" rows="9" maxlength="60000"
@@ -724,9 +746,9 @@
           especially for short, edited or non-native-English text. Use it to reflect on your work, never as proof.</p>
       </section>
       <div id="authenticity-result"></div>
-      <section class="papers-section">
-        <div class="section-heading"><div><span class="eyebrow">YOUR HISTORY</span><h2>Recent checks</h2></div>
-          <span class="count-pill" id="checks-count">${checks.length} ${checks.length === 1 ? "check" : "checks"}</span></div>
+      <section class="panel card papers-section" aria-labelledby="checks-title">
+        <div class="card-head"><h2 class="panel-title" id="checks-title">Recent checks
+          <span class="count" id="checks-count">${checks.length} ${checks.length === 1 ? "check" : "checks"}</span></h2></div>
         <div class="paper-list" id="recent-checks">${recentChecks(checks)}</div>
       </section>`;
   }
@@ -881,6 +903,9 @@
 
   const actions = {
     logout,
+    retry: () => route(),
+    // The URL hash is the router, so the skip link moves focus instead of following "#view".
+    skipToContent: () => $("view").focus(),
     toggleAuth() {
       state.authMode = state.authMode === "login" ? "register" : "login";
       renderAuth();
@@ -1124,6 +1149,10 @@
       return;
     }
     showMsg("");
+    // Pages that load data show this until they render, instead of leaving the previous page in place.
+    if (hash !== "#/login") {
+      $("view").innerHTML = `<p class="page-loading" role="status"><span class="spinner"></span> Loading…</p>`;
+    }
     try {
       if (hash === "#/login") renderAuth();
       else if (hash === "#/subjects") await renderSubjects();
@@ -1134,7 +1163,14 @@
       else if (/^#\/subjects\/\d+$/.test(hash)) await renderSubject(hash.match(/\d+/)[0]);
       else location.hash = "#/subjects";
     } catch (error) {
-      showMsg(error.message || "Could not load this page.");
+      // A page that never rendered gets an error panel in its place; otherwise show the usual notice.
+      if ($("view").querySelector(".page-loading")) {
+        $("view").innerHTML = `<div class="empty panel page-error" role="alert">
+          <h3>This page could not be loaded</h3><p>${esc(error.message || "Something went wrong.")}</p>
+          <button class="button button-secondary" data-action="retry">Try again</button></div>`;
+      } else {
+        showMsg(error.message || "Could not load this page.");
+      }
     }
   }
 
