@@ -6,6 +6,7 @@
     quiz: null,
     generated: null,
     interview: null,
+    progress: null,
     voiceRecorder: null,
     voiceStream: null,
     voiceChunks: [],
@@ -43,6 +44,7 @@
   }
 
   const QUESTION_MODES = { multiple_choice: "Multiple choice", subjective: "Subjective", mixed: "Both" };
+  const LEVELS = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" };
 
   function formatDate(value) {
     return value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
@@ -167,6 +169,7 @@
       <nav class="nav-links" aria-label="Main">
         ${link("subjects", "#/subjects", "My subjects")}
         ${link("tests", "#/tests", "My tests")}
+        ${link("progress", "#/progress", "Progress")}
         ${link("authenticity", "#/authenticity", "Authenticity check")}
         ${link("interview", "#/interview", "AI Interview")}
       </nav>
@@ -244,6 +247,8 @@
         <aside class="tools" aria-label="Other tools">
           <a class="tool" href="#/tests">${icon("history")}<span><strong>My tests</strong>
             <small>Review answers, grades and feedback from earlier tests.</small></span></a>
+          <a class="tool" href="#/progress">${icon("chart")}<span><strong>My progress</strong>
+            <small>See how your scores are changing and which topics to revise.</small></span></a>
           <a class="tool" href="#/authenticity">${icon("scan")}<span><strong>Authenticity check</strong>
             <small>Estimate whether parts of a text were written by AI.</small></span></a>
           <a class="tool" href="#/interview">${icon("microphone")}<span><strong>AI Interview</strong>
@@ -256,7 +261,7 @@
   async function renderInterviewSetup() {
     state.interview = null;
     renderNav("interview");
-    const subjects = await api("/subjects");
+    const [subjects, interviews] = await Promise.all([api("/subjects"), api("/interviews")]);
     $("view").innerHTML = `
       <header class="page-head">
         <div><h1>AI Interview</h1>
@@ -297,6 +302,20 @@
           </button>
         </form>
         ${subjects.length ? "" : `<p class="muted">You have no subjects yet. Choose “Engineering role” above, or add a subject first.</p>`}
+      </section>
+      <section class="panel card papers-section interview-history" aria-labelledby="interviews-title">
+        <div class="card-head"><h2 class="panel-title" id="interviews-title">Past interviews
+          <span class="count">${interviews.length}</span></h2></div>
+        ${interviews.length ? `<ul class="row-list">${interviews.map((item) => `
+          <li><a class="paper-row interview-row" href="#/interviews/${item.sessionId}">
+            <span class="paper-name"><strong>${esc(item.target)}</strong>
+              <small>${timeAgo(item.startedAt)} · ${esc(LEVELS[item.level] || item.level)} ·
+                ${item.answeredCount}/${item.questionCount} answered</small></span>
+            ${item.completed
+              ? `<span class="score-chip">${item.averageScore != null ? percent(item.averageScore) : "–"}</span>`
+              : `<span class="tag tag-warn">Continue</span>`}
+          </a></li>`).join("")}</ul>`
+          : `<p class="empty-papers">Your interviews are saved here, with every answer and its feedback.</p>`}
       </section>`;
     const subjectField = $("interview-subject-field");
     subjectField.hidden = !subjects.length;
@@ -326,7 +345,8 @@
       <header class="page-head interview-topline">
         <div><p class="page-kicker">Interview practice</p>
           <h1>${esc(interview.target)}</h1>
-          <p class="page-desc">${interview.level[0].toUpperCase() + interview.level.slice(1)} level · ${esc(interview.targetType === "subject" ? "Subject interview" : "Engineering-role interview")}</p>
+          <p class="page-desc">${LEVELS[interview.level]} level · ${esc(interview.targetType === "subject" ? "Subject interview" : "Engineering-role interview")}
+            · Saved as you go</p>
         </div>
         <button class="button button-secondary" data-action="endInterview">End interview</button>
       </header>
@@ -366,15 +386,11 @@
     interview.lastScore = result.score;
     interview.history.push({ speaker: "interviewer", content: result.feedback });
     renderNav("interview");
-    const candidateScores = interview.scores;
-    const average = candidateScores.length
-      ? Math.round(candidateScores.reduce((total, score) => total + score, 0) / candidateScores.length * 100)
-      : 0;
     $("view").innerHTML = `
       <section class="summary-card interview-summary">
         <p class="page-kicker">Interview complete · ${esc(interview.target)}</p>
         <h1>Session review</h1>
-        <div class="summary-score"><strong>${average}%</strong><span>average answer score</span></div>
+        <div class="summary-score"><strong>${percent(result.averageScore ?? 0)}</strong><span>average answer score</span></div>
         <p>${esc(result.feedback)}</p>
         <p class="muted">Scores reflect estimated technical content only—not accent, grammar, or speaking speed.</p>
         <details class="interview-transcript" open>
@@ -385,8 +401,55 @@
               <p>${esc(turn.content)}</p>
             </article>`).join("")}</div>
         </details>
-        <button class="button button-primary" data-action="newInterview">${icon("back")} New interview</button>
+        <p class="muted">This interview is saved. Find it under Past interviews to read the feedback on each answer.</p>
+        <div class="summary-actions">
+          <a class="button button-secondary" href="#/interviews/${interview.sessionId}">${icon("history")} Review each answer</a>
+          <button class="button button-primary" data-action="newInterview">${icon("back")} New interview</button>
+        </div>
       </section>`;
+  }
+
+  // Unfinished interviews reopen where they stopped; finished ones show each answer with its grade.
+  async function renderInterview(id) {
+    renderNav("interview");
+    const { summary, questionNumber, currentQuestion, summaryFeedback, answers } = await api(`/interviews/${id}`);
+    const history = answers.flatMap((answer) => [
+      { speaker: "interviewer", content: answer.question },
+      { speaker: "candidate", content: answer.answer },
+    ]);
+    if (currentQuestion) {
+      const last = answers.at(-1);
+      state.interview = {
+        sessionId: summary.sessionId, targetType: summary.targetType, target: summary.target,
+        level: summary.level, questionCount: summary.questionCount, questionNumber, currentQuestion,
+        history, lastFeedback: last?.feedback || "", lastScore: last?.score || 0, complete: false,
+      };
+      renderInterviewSession();
+      return;
+    }
+    $("view").innerHTML = `
+      ${crumbs("#/interview", "AI Interview", "Interview review")}
+      <header class="page-head">
+        <div><h1>${esc(summary.target)}</h1>
+          <p class="page-desc">${formatDate(summary.startedAt)} · ${LEVELS[summary.level]} level ·
+            ${summary.targetType === "subject" ? "Subject interview" : "Engineering-role interview"}</p></div>
+      </header>
+      <dl class="summary-strip">
+        <div><dt>Questions answered</dt><dd>${summary.answeredCount} / ${summary.questionCount}</dd></div>
+        <div><dt>Average answer score</dt><dd>${summary.averageScore != null ? percent(summary.averageScore) : "–"}</dd></div>
+        <div><dt>Finished</dt><dd>${summary.completedAt ? timeAgo(summary.completedAt) : "–"}</dd></div>
+      </dl>
+      ${summaryFeedback ? `<section class="panel interview-feedback"><span class="eyebrow">Overall feedback</span>
+        <p>${esc(summaryFeedback)}</p></section>` : ""}
+      <section class="review-list">${answers.map((answer) => `
+        <article class="review-card">
+          <p class="question-meta">Question ${answer.questionNumber}</p>
+          <div class="review-heading"><h3>${esc(answer.question)}</h3>
+            <span class="tag ${answer.score >= 0.6 ? "tag-good" : "tag-warn"}">Score ${percent(answer.score)}</span></div>
+          <div class="review-block"><span class="eyebrow">Your answer</span>
+            <p class="written-answer">${esc(answer.answer)}</p></div>
+          ${answer.feedback ? `<div class="review-block"><span class="eyebrow">Feedback</span><p>${esc(answer.feedback)}</p></div>` : ""}
+        </article>`).join("")}</section>`;
   }
 
   async function renderSubject(id) {
@@ -688,6 +751,220 @@
       <section class="review-list">${answers.map(reviewAnswer).join("")}</section>`;
   }
 
+  const mean = (values) => values.length ? values.reduce((total, value) => total + value, 0) / values.length : null;
+  const ratio = (item) => item.answeredCount ? item.correctCount / item.answeredCount : 0;
+  const signed = (value, digits = 0) => `${value > 0 ? "+" : value < 0 ? "−" : "±"}${Math.abs(value).toFixed(digits)}`;
+
+  // Compares the latest tests with the earliest ones, so one good or bad day does not set the direction.
+  function progressTrend(tests) {
+    if (tests.length < 2) return "Take another test to start seeing a trend.";
+    const size = Math.min(3, Math.floor(tests.length / 2));
+    const first = mean(tests.slice(0, size).map(ratio));
+    const last = mean(tests.slice(-size).map(ratio));
+    const change = Math.round((last - first) * 100);
+    const span = size === 1 ? ["latest test", "first"] : [`last ${size} tests`, `first ${size}`];
+    const direction = change > 0 ? `up ${change} points` : change < 0 ? `down ${-change} points` : "level";
+    return `Your ${span[0]} averaged <strong>${percent(last)}</strong> correct, ${direction} on your ${span[1]}.`;
+  }
+
+  // One line per test, oldest to newest, scaled 0–100%. Drawn to the box's real width so text stays its normal size.
+  function drawScoreChart(box, tests) {
+    const width = box.clientWidth;
+    const height = 220;
+    const pad = { top: 18, right: 44, bottom: 30, left: 44 };
+    const innerWidth = width - pad.left - pad.right;
+    const innerHeight = height - pad.top - pad.bottom;
+    const x = (index) => pad.left + (tests.length === 1 ? innerWidth / 2 : index / (tests.length - 1) * innerWidth);
+    const y = (value) => pad.top + (1 - value) * innerHeight;
+    const points = tests.map((test, index) => [x(index), y(ratio(test))]);
+    const line = points.map(([px, py], index) => `${index ? "L" : "M"}${px.toFixed(1)},${py.toFixed(1)}`).join("");
+    const area = `${line}L${points.at(-1)[0].toFixed(1)},${y(0)}L${points[0][0].toFixed(1)},${y(0)}Z`;
+    const grid = [0, 0.25, 0.5, 0.75, 1].map((tick) => `
+      <line class="chart-grid" x1="${pad.left}" x2="${width - pad.right}" y1="${y(tick)}" y2="${y(tick)}"/>
+      <text class="chart-tick" x="${pad.left - 8}" y="${y(tick) + 4}" text-anchor="end">${tick * 100}%</text>`).join("");
+    const [endX, endY] = points.at(-1);
+    box.innerHTML = `
+      <svg width="${width}" height="${height}" role="img" aria-label="Score for each of your ${tests.length} tests, oldest to newest. Latest: ${percent(ratio(tests.at(-1)))}.">
+        ${grid}
+        <text class="chart-tick" x="${points[0][0]}" y="${height - 8}" text-anchor="${tests.length === 1 ? "middle" : "start"}">Test 1</text>
+        ${tests.length > 1 ? `<text class="chart-tick" x="${endX}" y="${height - 8}" text-anchor="end">Test ${tests.length}</text>` : ""}
+        <path class="chart-area" d="${area}"/>
+        <path class="chart-line" d="${line}"/>
+        <line class="chart-crosshair" y1="${pad.top}" y2="${y(0)}" hidden/>
+        <circle class="chart-dot" cx="${endX}" cy="${endY}" r="4"/>
+        <text class="chart-end-label" x="${endX + 8}" y="${endY + 4}">${percent(ratio(tests.at(-1)))}</text>
+        <circle class="chart-dot chart-focus" r="5" hidden/>
+      </svg>
+      <div class="chart-tooltip" hidden></div>`;
+
+    const svg = box.querySelector("svg");
+    const crosshair = box.querySelector(".chart-crosshair");
+    const focus = box.querySelector(".chart-focus");
+    const tooltip = box.querySelector(".chart-tooltip");
+    const show = (index) => {
+      const test = tests[index];
+      const [px, py] = points[index];
+      box.dataset.index = index;
+      crosshair.setAttribute("x1", px);
+      crosshair.setAttribute("x2", px);
+      focus.setAttribute("cx", px);
+      focus.setAttribute("cy", py);
+      crosshair.hidden = focus.hidden = tooltip.hidden = false;
+      tooltip.innerHTML = `<strong>Test ${index + 1} · ${esc(test.subjectName)}</strong>
+        <span>${esc(formatDate(test.startedAt))}</span>
+        <span>${test.correctCount}/${test.answeredCount} correct · <b>${percent(ratio(test))}</b></span>
+        ${test.averageWrittenScore != null ? `<span>Written answers ${percent(test.averageWrittenScore)}</span>` : ""}`;
+      const left = Math.min(Math.max(px - tooltip.offsetWidth / 2, 0), width - tooltip.offsetWidth);
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${Math.max(py - tooltip.offsetHeight - 14, 0)}px`;
+    };
+    const hide = () => {
+      delete box.dataset.index;
+      crosshair.hidden = focus.hidden = tooltip.hidden = true;
+    };
+    const nearest = (clientX) => {
+      const offset = clientX - svg.getBoundingClientRect().left - pad.left;
+      return tests.length === 1 ? 0
+        : Math.min(tests.length - 1, Math.max(0, Math.round(offset / innerWidth * (tests.length - 1))));
+    };
+    svg.addEventListener("pointermove", (event) => show(nearest(event.clientX)));
+    svg.addEventListener("pointerleave", hide);
+    box.onkeydown = (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      const current = box.dataset.index === undefined ? tests.length : Number(box.dataset.index);
+      show(Math.min(tests.length - 1, Math.max(0, current + (event.key === "ArrowLeft" ? -1 : 1))));
+    };
+    box.onblur = hide;
+  }
+
+  function topicBars(topics) {
+    if (!topics.length) return `<p class="empty-papers">Topics appear here once you answer questions.</p>`;
+    // Weakest first, so the top of the list is what to revise next.
+    const sorted = [...topics].sort((a, b) => ratio(a) - ratio(b) || b.answeredCount - a.answeredCount);
+    const row = (topic) => `<li class="topic-bar">
+        <span class="topic-bar-label"><span class="topic-bar-name"><strong>${esc(topic.topicName)}</strong>
+            ${ratio(topic) < 0.6 ? `<span class="tag tag-warn">Needs practice</span>` : ""}</span>
+          <small>${esc(topic.subjectName)} · ${topic.correctCount}/${topic.answeredCount} correct${topic.averageWrittenScore != null
+            ? ` · written ${percent(topic.averageWrittenScore)}` : ""}</small></span>
+        <span class="topic-bar-track" aria-hidden="true"><span style="width:${Math.max(1, ratio(topic) * 100)}%"></span></span>
+        <span class="topic-bar-value">${percent(ratio(topic))}</span>
+      </li>`;
+    const shown = sorted.slice(0, 8).map(row).join("");
+    const rest = sorted.slice(8).map(row).join("");
+    return `<ul class="row-list topic-bars">${shown}</ul>
+      ${rest ? `<details class="topic-more"><summary>Show all ${sorted.length} topics</summary>
+        <ul class="row-list topic-bars">${rest}</ul></details>` : ""}`;
+  }
+
+  function subjectRows(tests) {
+    const bySubject = new Map();
+    tests.forEach((test) => {
+      if (!bySubject.has(test.subjectId)) bySubject.set(test.subjectId, []);
+      bySubject.get(test.subjectId).push(test);
+    });
+    return [...bySubject.values()].map((subjectTests) => {
+      const answered = subjectTests.reduce((total, test) => total + test.answeredCount, 0);
+      const correct = subjectTests.reduce((total, test) => total + test.correctCount, 0);
+      const written = mean(subjectTests.map((test) => test.averageWrittenScore).filter((score) => score != null));
+      const latest = subjectTests.at(-1).abilityEstimate;
+      const change = latest - subjectTests[0].abilityEstimate;
+      return `<tr>
+        <th scope="row"><a href="#/subjects/${subjectTests[0].subjectId}">${esc(subjectTests[0].subjectName)}</a></th>
+        <td>${subjectTests.length}</td>
+        <td>${percent(correct / answered)} <small>${correct}/${answered}</small></td>
+        <td>${written != null ? percent(written) : "–"}</td>
+        <td>${latest.toFixed(2)}${subjectTests.length > 1 ? ` <small>${signed(change, 2)} since first test</small>` : ""}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function progressBody(progress, subjectId) {
+    const tests = subjectId ? progress.tests.filter((test) => String(test.subjectId) === subjectId) : progress.tests;
+    const topics = subjectId ? progress.topics.filter((topic) => String(topic.subjectId) === subjectId) : progress.topics;
+    const answered = tests.reduce((total, test) => total + test.answeredCount, 0);
+    const correct = tests.reduce((total, test) => total + test.correctCount, 0);
+    const written = mean(tests.map((test) => test.averageWrittenScore).filter((score) => score != null));
+    const flagged = tests.reduce((total, test) => total + test.aiFlaggedCount, 0);
+    return `
+      <dl class="summary-strip progress-stats">
+        <div><dt>Tests taken</dt><dd>${tests.length}</dd></div>
+        <div><dt>Questions answered</dt><dd>${answered}</dd></div>
+        <div><dt>Answers correct</dt><dd>${percent(correct / answered)}</dd></div>
+        <div><dt>Average written score</dt><dd>${written != null ? percent(written) : "–"}</dd></div>
+        <div><dt>Flagged as likely AI-written</dt><dd>${flagged}</dd></div>
+      </dl>
+      <div class="progress-grid">
+        <section class="panel progress-chart-panel" aria-labelledby="score-title">
+          <h2 class="panel-title" id="score-title">Score by test</h2>
+          <p class="panel-desc">${progressTrend(tests)}</p>
+          <div class="line-chart" id="score-chart" tabindex="0"
+            aria-describedby="score-chart-help"></div>
+          <p class="sr-only" id="score-chart-help">Use the left and right arrow keys to step through your tests.</p>
+          <details class="chart-table"><summary>Show scores as a table</summary>
+            <table class="data-table">
+              <thead><tr><th scope="col">Test</th><th scope="col">Subject</th><th scope="col">Date</th>
+                <th scope="col">Correct</th><th scope="col">Written</th></tr></thead>
+              <tbody>${tests.map((test, index) => `<tr>
+                <th scope="row"><a href="#/tests/${test.sessionId}">Test ${index + 1}</a></th>
+                <td>${esc(test.subjectName)}</td><td>${esc(formatDate(test.startedAt))}</td>
+                <td>${percent(ratio(test))} <small>${test.correctCount}/${test.answeredCount}</small></td>
+                <td>${test.averageWrittenScore != null ? percent(test.averageWrittenScore) : "–"}</td></tr>`).join("")}</tbody>
+            </table>
+          </details>
+        </section>
+        <section class="panel card" aria-labelledby="topics-title">
+          <div class="card-head"><div><h2 class="panel-title" id="topics-title">Topics to revise</h2>
+            <p class="muted">Share of answers correct, weakest first</p></div></div>
+          ${topicBars(topics)}
+        </section>
+      </div>
+      <section class="panel card" aria-labelledby="subjects-progress-title">
+        <div class="card-head"><div><h2 class="panel-title" id="subjects-progress-title">By subject</h2>
+          <p class="muted">Ability is the adaptive engine's estimate of your level at the end of a test, from −3 to +3</p></div></div>
+        <div class="table-scroll"><table class="data-table">
+          <thead><tr><th scope="col">Subject</th><th scope="col">Tests</th><th scope="col">Correct</th>
+            <th scope="col">Written</th><th scope="col">Ability (latest test)</th></tr></thead>
+          <tbody>${subjectRows(tests)}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  function showProgress(subjectId) {
+    const { progress } = state;
+    const tests = subjectId ? progress.tests.filter((test) => String(test.subjectId) === subjectId) : progress.tests;
+    $("progress-body").innerHTML = progressBody(progress, subjectId);
+    const box = $("score-chart");
+    drawScoreChart(box, tests);
+    // Redraw at the new width; the observer is dropped once the chart leaves the page.
+    let lastWidth = box.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (!box.isConnected) return observer.disconnect();
+      if (box.clientWidth !== lastWidth) drawScoreChart(box, tests);
+      lastWidth = box.clientWidth;
+    });
+    observer.observe(box);
+  }
+
+  async function renderProgress() {
+    renderNav("progress");
+    const progress = await api("/progress");
+    state.progress = progress;
+    const subjects = [...new Map(progress.tests.map((test) => [test.subjectId, test.subjectName])).entries()];
+    $("view").innerHTML = `
+      <header class="page-head">
+        <div><h1>My progress</h1>
+          <p class="page-desc">How your test results are changing, and which topics need more practice.</p></div>
+        ${subjects.length > 1 ? `<label class="format-input progress-filter">Subject
+          <select id="progress-subject"><option value="">All subjects</option>
+            ${subjects.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join("")}</select></label>` : ""}
+      </header>
+      ${progress.tests.length ? `<div id="progress-body"></div>` : `<div class="empty panel">
+        <h3>No results yet</h3><p>Take a test from one of your subjects. Your scores and topic results will appear here.</p>
+        <a class="button button-secondary" href="#/subjects">Go to my subjects</a></div>`}`;
+    if (progress.tests.length) showProgress("");
+  }
+
   function authenticityResult(result) {
     const flaggedPassages = result.passages.length > 1 ? `
       <div class="passage-list"><h3 class="eyebrow">Section by section</h3>
@@ -777,17 +1054,11 @@
       if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 20) {
         throw new Error("Choose between 1 and 20 questions.");
       }
-      const settings = {
-        targetType, target, level: data.get("level"), questionCount,
-        questionNumber: 0, history: [], answer: null,
-      };
-      const firstTurn = await api("/interview/turn", { method: "POST", body: settings });
-      if (!firstTurn.question || firstTurn.complete) {
-        throw new Error("The interviewer could not prepare an opening question.");
-      }
+      const settings = { targetType, target, level: data.get("level"), questionCount };
+      const firstTurn = await api("/interviews", { method: "POST", body: settings });
       state.interview = {
-        ...settings, questionNumber: 1, currentQuestion: firstTurn.question,
-        lastFeedback: "", lastScore: 0, scores: [], complete: false,
+        ...settings, sessionId: firstTurn.sessionId, questionNumber: firstTurn.questionNumber,
+        currentQuestion: firstTurn.question, history: [], lastFeedback: "", lastScore: 0, complete: false,
       };
       renderInterviewSession();
       speakText(firstTurn.question);
@@ -796,31 +1067,18 @@
       const answer = form.elements.answer.value.trim();
       if (answer.length < 10) throw new Error("Please give a little more detail before submitting.");
       const interview = state.interview;
-      const result = await api("/interview/turn", {
-        method: "POST",
-        body: {
-          targetType: interview.targetType,
-          target: interview.target,
-          level: interview.level,
-          questionNumber: interview.questionNumber,
-          questionCount: interview.questionCount,
-          history: interview.history,
-          answer,
-        },
-      });
+      const result = await api(`/interviews/${interview.sessionId}/answer`, { method: "POST", body: { answer } });
       interview.history.push({ speaker: "interviewer", content: interview.currentQuestion });
       interview.history.push({ speaker: "candidate", content: answer });
-      interview.scores.push(result.score);
       if (result.complete) {
         renderInterviewComplete(result);
         speakText(result.feedback);
         return;
       }
-      if (!result.question) throw new Error("The interviewer did not provide the next question.");
       interview.lastFeedback = result.feedback;
       interview.lastScore = result.score;
       interview.currentQuestion = result.question;
-      interview.questionNumber += 1;
+      interview.questionNumber = result.questionNumber;
       renderInterviewSession();
       speakText(result.question);
     },
@@ -1097,6 +1355,7 @@
         : "No files selected";
       event.target.closest(".dropzone").classList.toggle("has-files", files.length > 0);
     }
+    if (event.target.id === "progress-subject") showProgress(event.target.value);
   });
 
   document.addEventListener("submit", async (event) => {
@@ -1158,6 +1417,8 @@
       else if (hash === "#/subjects") await renderSubjects();
       else if (hash === "#/interview") await renderInterviewSetup();
       else if (hash === "#/tests") await renderTests();
+      else if (hash === "#/progress") await renderProgress();
+      else if (/^#\/interviews\/\d+$/.test(hash)) await renderInterview(hash.match(/\d+/)[0]);
       else if (/^#\/tests\/\d+$/.test(hash)) await renderTestReview(hash.match(/\d+/)[0]);
       else if (hash === "#/authenticity") await renderAuthenticity();
       else if (/^#\/subjects\/\d+$/.test(hash)) await renderSubject(hash.match(/\d+/)[0]);

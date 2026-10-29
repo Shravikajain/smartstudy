@@ -6,6 +6,8 @@ import java.util.List;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,85 +15,58 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.smartstudy.backend.dto.ml.MlInterviewMessage;
-import com.smartstudy.backend.dto.ml.MlInterviewTurnRequest;
-import com.smartstudy.backend.dto.ml.MlInterviewTurnResponse;
+import com.smartstudy.backend.dto.InterviewAnswerRequest;
+import com.smartstudy.backend.dto.InterviewReviewResponse;
+import com.smartstudy.backend.dto.InterviewSummary;
+import com.smartstudy.backend.dto.InterviewTurnResponse;
+import com.smartstudy.backend.dto.StartInterviewRequest;
 import com.smartstudy.backend.dto.ml.MlTranscriptionResponse;
+import com.smartstudy.backend.service.InterviewService;
 import com.smartstudy.backend.service.MlClient;
 import com.smartstudy.backend.service.UserService;
 
 @RestController
-@RequestMapping("/api/interview")
+@RequestMapping("/api")
 public class InterviewController {
 
     private static final long MAX_AUDIO_BYTES = 10L * 1024 * 1024;
-    private static final int MAX_HISTORY_CHARS = 24000;
-    private static final List<String> TARGET_TYPES = List.of("subject", "engineering_role");
-    private static final List<String> LEVELS = List.of("beginner", "intermediate", "advanced");
 
+    private final InterviewService interviewService;
     private final MlClient mlClient;
     private final UserService userService;
 
-    public InterviewController(MlClient mlClient, UserService userService) {
+    public InterviewController(InterviewService interviewService, MlClient mlClient, UserService userService) {
+        this.interviewService = interviewService;
         this.mlClient = mlClient;
         this.userService = userService;
     }
 
-    @PostMapping("/turn")
-    public ResponseEntity<MlInterviewTurnResponse> interviewTurn(
-            @RequestBody MlInterviewTurnRequest request,
-            Authentication authentication) {
-        userService.getCurrentUser(authentication);
-        if (request.targetType() == null || !TARGET_TYPES.contains(request.targetType())) {
-            throw new IllegalArgumentException("Choose a subject or engineering role");
-        }
-        if (request.target() == null || request.target().isBlank() || request.target().length() > 120) {
-            throw new IllegalArgumentException("Interview target must be 1 to 120 characters");
-        }
-        if (request.level() == null || !LEVELS.contains(request.level())) {
-            throw new IllegalArgumentException("Choose beginner, intermediate, or advanced level");
-        }
-        if (request.questionCount() < 1 || request.questionCount() > 20
-                || request.questionNumber() < 0
-                || request.questionNumber() > request.questionCount()) {
-            throw new IllegalArgumentException("Interview question count must be between 1 and 20");
-        }
-        if (request.history() == null || request.history().size() > 40
-                || request.history().stream().anyMatch(message -> message == null
-                || message.content() == null || message.content().isBlank()
-                || message.content().length() > 12000
-                || message.speaker() == null
-                || !List.of("interviewer", "candidate").contains(message.speaker()))) {
-            throw new IllegalArgumentException("Interview history is invalid or too long");
-        }
-        if (request.questionNumber() == 0 && request.answer() != null
-                || request.questionNumber() > 0 && (request.answer() == null
-                || request.answer().isBlank() || request.answer().length() < 10
-                || request.answer().length() > 12000)) {
-            throw new IllegalArgumentException("Provide an answer for the current interview question");
-        }
-        List<MlInterviewMessage> history = recentHistory(request.history());
-        return ResponseEntity.ok(mlClient.interviewTurn(new MlInterviewTurnRequest(
-                request.targetType(), request.target(), request.level(), request.questionNumber(),
-                request.questionCount(), history, request.answer())));
+    @PostMapping("/interviews")
+    public ResponseEntity<InterviewTurnResponse> start(@RequestBody StartInterviewRequest request,
+                                                       Authentication authentication) {
+        return ResponseEntity.ok(interviewService.start(request, userService.getCurrentUser(authentication)));
     }
 
-    // Long interviews would otherwise fail near the end: keep the most recent messages that fit
-    // the prompt budget, dropping whole interviewer/candidate pairs from the start.
-    static List<MlInterviewMessage> recentHistory(List<MlInterviewMessage> history) {
-        int start = 0;
-        int length = history.stream().mapToInt(message -> message.content().length()).sum();
-        while (length > MAX_HISTORY_CHARS && start < history.size()) {
-            int dropped = Math.min(2, history.size() - start);
-            for (int i = 0; i < dropped; i++) {
-                length -= history.get(start + i).content().length();
-            }
-            start += dropped;
-        }
-        return history.subList(start, history.size());
+    @PostMapping("/interviews/{sessionId}/answer")
+    public ResponseEntity<InterviewTurnResponse> answer(@PathVariable Long sessionId,
+                                                        @RequestBody InterviewAnswerRequest request,
+                                                        Authentication authentication) {
+        return ResponseEntity.ok(interviewService.answer(sessionId, request.answer(),
+                userService.getCurrentUser(authentication)));
     }
 
-    @PostMapping(value = "/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @GetMapping("/interviews")
+    public ResponseEntity<List<InterviewSummary>> history(Authentication authentication) {
+        return ResponseEntity.ok(interviewService.history(userService.getCurrentUser(authentication)));
+    }
+
+    @GetMapping("/interviews/{sessionId}")
+    public ResponseEntity<InterviewReviewResponse> review(@PathVariable Long sessionId,
+                                                          Authentication authentication) {
+        return ResponseEntity.ok(interviewService.review(sessionId, userService.getCurrentUser(authentication)));
+    }
+
+    @PostMapping(value = "/interview/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<MlTranscriptionResponse> transcribeAudio(
             @RequestParam("file") MultipartFile file,
             @RequestParam(name = "language", required = false) String language,

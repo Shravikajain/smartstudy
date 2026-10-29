@@ -1,6 +1,7 @@
 package com.smartstudy.backend.service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -11,12 +12,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.smartstudy.backend.dto.AnswerReview;
+import com.smartstudy.backend.dto.ProgressResponse;
 import com.smartstudy.backend.dto.QuestionBankResponse;
 import com.smartstudy.backend.dto.QuizHistoryItem;
 import com.smartstudy.backend.dto.QuizReviewResponse;
 import com.smartstudy.backend.model.Question;
 import com.smartstudy.backend.model.QuizAnswer;
 import com.smartstudy.backend.model.QuizSession;
+import com.smartstudy.backend.model.Topic;
 import com.smartstudy.backend.model.User;
 import com.smartstudy.backend.repository.QuestionRepository;
 import com.smartstudy.backend.repository.QuizAnswerRepository;
@@ -43,16 +46,49 @@ public class QuizHistoryService {
 
     @Transactional(readOnly = true)
     public List<QuizHistoryItem> history(User user) {
-        List<QuizSession> sessions = sessionRepository.findByUserIdOrderByIdDesc(user.getId()).stream()
-                .filter(session -> session.getAnsweredCount() > 0)
-                .toList();
-        Map<Long, List<QuizAnswer>> answersBySession = answerRepository
-                .findBySessionIdInOrderByIdAsc(sessions.stream().map(QuizSession::getId).toList())
-                .stream()
-                .collect(Collectors.groupingBy(answer -> answer.getSession().getId()));
+        List<QuizSession> sessions = answeredSessions(user);
+        Map<Long, List<QuizAnswer>> answersBySession = answersBySession(sessions);
         return sessions.stream()
                 .map(session -> summary(session, answersBySession.getOrDefault(session.getId(), List.of())))
                 .toList();
+    }
+
+    /** Every answered test, oldest first, plus how each topic has gone across all of them. */
+    @Transactional(readOnly = true)
+    public ProgressResponse progress(User user) {
+        List<QuizSession> sessions = answeredSessions(user).reversed();
+        Map<Long, List<QuizAnswer>> answersBySession = answersBySession(sessions);
+        List<ProgressResponse.TestPoint> tests = sessions.stream().map(session -> {
+            QuizHistoryItem summary = summary(session, answersBySession.getOrDefault(session.getId(), List.of()));
+            return new ProgressResponse.TestPoint(session.getId(), summary.subjectId(), summary.subjectName(),
+                    session.getStartedAt(), summary.answeredCount(), summary.correctCount(),
+                    summary.averageWrittenScore(), summary.aiFlaggedCount(), session.getAbilityEstimate());
+        }).toList();
+
+        Map<Long, List<QuizAnswer>> answersByTopic = answersBySession.values().stream()
+                .flatMap(List::stream)
+                .collect(Collectors.groupingBy(answer -> answer.getQuestion().getTopic().getId(),
+                        LinkedHashMap::new, Collectors.toList()));
+        List<ProgressResponse.TopicScore> topics = answersByTopic.values().stream().map(answers -> {
+            Topic topic = answers.get(0).getQuestion().getTopic();
+            return new ProgressResponse.TopicScore(topic.getId(), topic.getName(), topic.getSubject().getId(),
+                    topic.getSubject().getName(), answers.size(),
+                    (int) answers.stream().filter(QuizAnswer::isCorrect).count(), averageScore(answers));
+        }).toList();
+        return new ProgressResponse(tests, topics);
+    }
+
+    private List<QuizSession> answeredSessions(User user) {
+        return sessionRepository.findByUserIdOrderByIdDesc(user.getId()).stream()
+                .filter(session -> session.getAnsweredCount() > 0)
+                .toList();
+    }
+
+    private Map<Long, List<QuizAnswer>> answersBySession(List<QuizSession> sessions) {
+        return answerRepository
+                .findBySessionIdInOrderByIdAsc(sessions.stream().map(QuizSession::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(answer -> answer.getSession().getId()));
     }
 
     @Transactional(readOnly = true)
@@ -78,13 +114,17 @@ public class QuizHistoryService {
         return new QuestionBankResponse(questions.size() - subjective, subjective);
     }
 
-    private QuizHistoryItem summary(QuizSession session, List<QuizAnswer> answers) {
+    private static Double averageScore(List<QuizAnswer> answers) {
         OptionalDouble writtenScores = answers.stream()
                 .map(QuizAnswer::getScore)
                 .filter(Objects::nonNull)
                 .mapToDouble(Double::doubleValue)
                 .average();
-        Double averageWrittenScore = writtenScores.isPresent() ? writtenScores.getAsDouble() : null;
+        return writtenScores.isPresent() ? writtenScores.getAsDouble() : null;
+    }
+
+    private QuizHistoryItem summary(QuizSession session, List<QuizAnswer> answers) {
+        Double averageWrittenScore = averageScore(answers);
         int aiFlagged = (int) answers.stream()
                 .filter(answer -> Boolean.TRUE.equals(answer.getAiFlagged()))
                 .count();

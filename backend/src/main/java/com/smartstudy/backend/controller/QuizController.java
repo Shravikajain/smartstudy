@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.smartstudy.backend.dto.AnswerRequest;
 import com.smartstudy.backend.dto.AnswerResult;
+import com.smartstudy.backend.dto.ProgressResponse;
 import com.smartstudy.backend.dto.QuestionBankResponse;
 import com.smartstudy.backend.dto.QuizHistoryItem;
 import com.smartstudy.backend.dto.QuizReviewResponse;
@@ -51,6 +52,12 @@ public class QuizController {
     public ResponseEntity<List<QuizHistoryItem>> history(Authentication authentication) {
         User user = userService.getCurrentUser(authentication);
         return ResponseEntity.ok(historyService.history(user));
+    }
+
+    @GetMapping("/progress")
+    public ResponseEntity<ProgressResponse> progress(Authentication authentication) {
+        User user = userService.getCurrentUser(authentication);
+        return ResponseEntity.ok(historyService.progress(user));
     }
 
     @GetMapping("/quizzes/{sessionId}")

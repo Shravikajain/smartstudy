@@ -9,6 +9,7 @@ import com.smartstudy.backend.dto.ml.MlGeneratedQuestion;
 import com.smartstudy.backend.dto.ml.MlGenerateResponse;
 import com.smartstudy.backend.dto.ml.MlDetectResponse;
 import com.smartstudy.backend.dto.ml.MlGradeAnswerResponse;
+import com.smartstudy.backend.dto.ml.MlInterviewMessage;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnRequest;
 import com.smartstudy.backend.dto.ml.MlInterviewTurnResponse;
 import com.smartstudy.backend.dto.ml.MlTranscriptionResponse;
@@ -393,8 +394,22 @@ class QuizFlowIntegrationTest {
                 .andExpect(jsonPath("$.answers[0].feedback").value("Good, add an example."))
                 .andExpect(jsonPath("$.answers[0].aiProbability").value(0.82))
                 .andExpect(jsonPath("$.answers[0].aiFlagged").value(true));
+        mockMvc.perform(get("/api/progress").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tests[0].sessionId").value(sessionId))
+                .andExpect(jsonPath("$.tests[0].subjectName").value("Algorithms"))
+                .andExpect(jsonPath("$.tests[0].answeredCount").value(1))
+                .andExpect(jsonPath("$.tests[0].averageWrittenScore").value(0.75))
+                .andExpect(jsonPath("$.tests[0].abilityEstimate").isNumber())
+                .andExpect(jsonPath("$.topics[0].topicName").value("Dynamic programming"))
+                .andExpect(jsonPath("$.topics[0].answeredCount").value(1))
+                .andExpect(jsonPath("$.topics[0].averageWrittenScore").value(0.75));
 
         String otherAuth = registerAndLogin("history-intruder@test.com");
+        mockMvc.perform(get("/api/progress").header("Authorization", otherAuth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tests").isEmpty())
+                .andExpect(jsonPath("$.topics").isEmpty());
         mockMvc.perform(get("/api/quizzes/{id}", sessionId).header("Authorization", otherAuth))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/quizzes").header("Authorization", otherAuth))
@@ -447,23 +462,68 @@ class QuizFlowIntegrationTest {
     }
 
     @Test
-    void interviewTurnRequiresAuthenticationAndReturnsNextQuestion() throws Exception {
+    void interviewsAreSavedWithEveryAnswerAndCanBeReviewed() throws Exception {
         String auth = registerAndLogin("interview@test.com");
-        when(mlClient.interviewTurn(any())).thenReturn(new MlInterviewTurnResponse(
-                "How would you handle a cache invalidation problem?", "", 0.0, false));
+        when(mlClient.interviewTurn(any())).thenReturn(
+                new MlInterviewTurnResponse("How would you handle a cache invalidation problem?", "", 0.0, false),
+                new MlInterviewTurnResponse("How would you size the cache?", "Clear, mention TTLs.", 0.6, false),
+                new MlInterviewTurnResponse(null, "Solid fundamentals overall.", 0.8, true));
 
-        mockMvc.perform(post("/api/interview/turn")
-                        .header("Authorization", auth)
+        String startBody = postJson("/api/interviews", auth, """
+                {"targetType":"engineering_role","target":"Backend Engineer",
+                 "level":"intermediate","questionCount":2}
+                """);
+        Integer sessionId = JsonPath.read(startBody, "$.sessionId");
+        assertThat((String) JsonPath.read(startBody, "$.question"))
+                .isEqualTo("How would you handle a cache invalidation problem?");
+        assertThat((Integer) JsonPath.read(startBody, "$.questionNumber")).isEqualTo(1);
+
+        mockMvc.perform(post("/api/interviews/{id}/answer", sessionId).header("Authorization", auth)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"targetType":"engineering_role","target":"Backend Engineer",
-                                 "level":"intermediate","questionNumber":0,"questionCount":5,
-                                 "history":[],"answer":null}
-                                """))
+                        .content("{\"answer\":\"Publish an invalidation event when the data changes.\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.question").value(
-                        "How would you handle a cache invalidation problem?"))
+                .andExpect(jsonPath("$.question").value("How would you size the cache?"))
+                .andExpect(jsonPath("$.questionNumber").value(2))
+                .andExpect(jsonPath("$.score").value(0.6))
                 .andExpect(jsonPath("$.complete").value(false));
+        mockMvc.perform(post("/api/interviews/{id}/answer", sessionId).header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answer\":\"Measure the working set and hit rate first.\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.complete").value(true))
+                .andExpect(jsonPath("$.averageScore").value(0.7));
+
+        // The second request carried the saved transcript, ending with the question being answered.
+        org.mockito.ArgumentCaptor<MlInterviewTurnRequest> requests = forClass(MlInterviewTurnRequest.class);
+        verify(mlClient, times(3)).interviewTurn(requests.capture());
+        assertThat(requests.getAllValues().get(2).history()).extracting(MlInterviewMessage::content)
+                .containsExactly("How would you handle a cache invalidation problem?",
+                        "Publish an invalidation event when the data changes.", "How would you size the cache?");
+
+        mockMvc.perform(get("/api/interviews").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sessionId").value(sessionId))
+                .andExpect(jsonPath("$[0].target").value("Backend Engineer"))
+                .andExpect(jsonPath("$[0].answeredCount").value(2))
+                .andExpect(jsonPath("$[0].completed").value(true));
+        mockMvc.perform(get("/api/interviews/{id}", sessionId).header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summaryFeedback").value("Solid fundamentals overall."))
+                .andExpect(jsonPath("$.currentQuestion").doesNotExist())
+                .andExpect(jsonPath("$.answers[0].answer").value("Publish an invalidation event when the data changes."))
+                .andExpect(jsonPath("$.answers[1].question").value("How would you size the cache?"))
+                .andExpect(jsonPath("$.answers[1].score").value(0.8));
+        mockMvc.perform(post("/api/interviews/{id}/answer", sessionId).header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"answer\":\"One more answer after the end.\"}"))
+                .andExpect(status().isBadRequest());
+
+        String otherAuth = registerAndLogin("interview-intruder@test.com");
+        mockMvc.perform(get("/api/interviews/{id}", sessionId).header("Authorization", otherAuth))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/interviews").header("Authorization", otherAuth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
     }
 
     @Test
